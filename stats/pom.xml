@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <artifactId>explore-with-me</artifactId>
+        <groupId>ru.practicum</groupId>
+        <version>0.0.1-SNAPSHOT</version>
+        <!-- ИСПРАВЛЕНО: правильный путь -->
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>stats</artifactId>
+    <packaging>pom</packaging>
+    <name>stats</name>
+    <description>Stats module for Explore With Me</description>
+
+    <modules>
+        <module>stats-dto</module>
+        <module>stats-server</module>
+        <module>stats-client</module>
+    </modules>
+</project>
