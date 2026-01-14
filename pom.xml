@@ -6,7 +6,7 @@
 	<parent>
 		<groupId>org.springframework.boot</groupId>
 		<artifactId>spring-boot-starter-parent</artifactId>
-		<version>3.3.0</version> <!-- ИСПРАВЬТЕ: было 3.3.4 -->
+		<version>3.2.5</version>
 		<relativePath/>
 	</parent>
 
@@ -18,12 +18,9 @@
 	<packaging>pom</packaging>
 
 	<modules>
-		<module>main-service</module> <!-- ВАЖНО: main-service должен быть первым -->
+		<module>core</module>
 		<module>stats</module>
 		<module>infra</module>
-		<module>infra/config-server</module>
-		<module>infra/discovery-server</module>
-		<module>infra/gateway-server</module>
 	</modules>
 
 	<properties>
@@ -34,7 +31,6 @@
 		<jakarta.validation.version>3.0.2</jakarta.validation.version>
 		<maven-compiler-plugin.version>3.11.0</maven-compiler-plugin.version>
 		<lombok-mapstruct-binding.version>0.2.0</lombok-mapstruct-binding.version>
-		<!-- ДОБАВЬТЕ: -->
 		<postgresql.version>42.7.2</postgresql.version>
 	</properties>
 
@@ -56,7 +52,6 @@
 				<artifactId>jakarta.validation-api</artifactId>
 				<version>${jakarta.validation.version}</version>
 			</dependency>
-			<!-- ДОБАВЬТЕ: -->
 			<dependency>
 				<groupId>org.postgresql</groupId>
 				<artifactId>postgresql</artifactId>
@@ -67,13 +62,19 @@
 				<artifactId>lombok-mapstruct-binding</artifactId>
 				<version>${lombok-mapstruct-binding.version}</version>
 			</dependency>
+			<dependency>
+				<groupId>org.springframework.cloud</groupId>
+				<artifactId>spring-cloud-dependencies</artifactId>
+				<version>2023.0.0</version>
+				<type>pom</type>
+				<scope>import</scope>
+			</dependency>
 		</dependencies>
 	</dependencyManagement>
 
 	<build>
 		<pluginManagement>
 			<plugins>
-				<!-- ДОБАВЬТЕ ЭТОТ ПЛАГИН: -->
 				<plugin>
 					<groupId>org.apache.maven.plugins</groupId>
 					<artifactId>maven-compiler-plugin</artifactId>
@@ -92,7 +93,6 @@
 					</configuration>
 				</plugin>
 
-				<!-- Остальные плагины как в старом файле -->
 				<plugin>
 					<groupId>org.apache.maven.plugins</groupId>
 					<artifactId>maven-checkstyle-plugin</artifactId>
@@ -213,7 +213,6 @@
 						</execution>
 					</executions>
 				</plugin>
-				<!-- ДОБАВЬТЕ: -->
 				<plugin>
 					<groupId>org.springframework.boot</groupId>
 					<artifactId>spring-boot-maven-plugin</artifactId>

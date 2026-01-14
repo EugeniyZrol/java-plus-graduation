@@ -1,0 +1,11 @@
+spring:
+  application:
+    name: stats-server
+  config:
+    import: "optional:configserver:"
+  cloud:
+    config:
+      discovery:
+        enabled: true
+        service-id: config-server
+      fail-fast: false

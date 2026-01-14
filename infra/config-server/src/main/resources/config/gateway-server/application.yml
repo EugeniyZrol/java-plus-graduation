@@ -1,0 +1,209 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: gateway-server
+
+  cloud:
+    gateway:
+      discovery:
+        locator:
+          enabled: false
+
+      routes:
+        - id: public_events_route
+          uri: lb://main-service
+          predicates:
+            - Path=/events/**
+          filters:
+            - RewritePath=/events/(?<segment>.*), /events/$\{segment}
+            - name: Retry
+              args:
+                retries: 3
+                statuses: INTERNAL_SERVER_ERROR, BAD_GATEWAY, SERVICE_UNAVAILABLE, GATEWAY_TIMEOUT
+                methods: GET
+                backoff:
+                  firstBackoff: 100ms
+                  maxBackoff: 1s
+                  factor: 2
+
+        - id: public_categories_route
+          uri: lb://main-service
+          predicates:
+            - Path=/categories/**
+          filters:
+            - RewritePath=/categories/(?<segment>.*), /categories/$\{segment}
+
+        - id: public_compilations_route
+          uri: lb://main-service
+          predicates:
+            - Path=/compilations/**
+          filters:
+            - RewritePath=/compilations/(?<segment>.*), /compilations/$\{segment}
+
+        - id: public_comments_route
+          uri: lb://main-service
+          predicates:
+            - Path=/comments/**
+          filters:
+            - RewritePath=/comments/(?<segment>.*), /comments/$\{segment}
+
+        - id: private_events_route
+          uri: lb://main-service
+          predicates:
+            - Path=/users/{userId}/events/**
+          filters:
+            - RewritePath=/users/(?<userId>\d+)/events/(?<segment>.*), /users/$\{userId}/events/$\{segment}
+            - name: Retry
+              args:
+                retries: 3
+                statuses: INTERNAL_SERVER_ERROR, BAD_GATEWAY, SERVICE_UNAVAILABLE, GATEWAY_TIMEOUT
+                methods: GET,POST,PATCH
+                backoff:
+                  firstBackoff: 100ms
+                  maxBackoff: 1s
+                  factor: 2
+
+        - id: private_requests_route
+          uri: lb://main-service
+          predicates:
+            - Path=/users/{userId}/requests/**
+          filters:
+            - RewritePath=/users/(?<userId>\d+)/requests/(?<segment>.*), /users/$\{userId}/requests/$\{segment}
+
+        - id: private_comments_route
+          uri: lb://main-service
+          predicates:
+            - Path=/users/{userId}/comments/**
+          filters:
+            - RewritePath=/users/(?<userId>\d+)/comments/(?<segment>.*), /users/$\{userId}/comments/$\{segment}
+
+        - id: admin_users_route
+          uri: lb://main-service
+          predicates:
+            - Path=/admin/users/**
+          filters:
+            - RewritePath=/admin/users/(?<segment>.*), /admin/users/$\{segment}
+            - name: Retry
+              args:
+                retries: 3
+                statuses: INTERNAL_SERVER_ERROR, BAD_GATEWAY, SERVICE_UNAVAILABLE, GATEWAY_TIMEOUT
+                methods: GET,POST,DELETE
+                backoff:
+                  firstBackoff: 100ms
+                  maxBackoff: 1s
+                  factor: 2
+
+        - id: admin_categories_route
+          uri: lb://main-service
+          predicates:
+            - Path=/admin/categories/**
+          filters:
+            - RewritePath=/admin/categories/(?<segment>.*), /admin/categories/$\{segment}
+            - name: CircuitBreaker
+              args:
+                name: adminCategoriesCircuitBreaker
+
+        - id: admin_events_route
+          uri: lb://main-service
+          predicates:
+            - Path=/admin/events/**
+          filters:
+            - RewritePath=/admin/events/(?<segment>.*), /admin/events/$\{segment}
+            - name: CircuitBreaker
+              args:
+                name: adminEventsCircuitBreaker
+
+        - id: admin_compilations_route
+          uri: lb://main-service
+          predicates:
+            - Path=/admin/compilations/**
+          filters:
+            - RewritePath=/admin/compilations/(?<segment>.*), /admin/compilations/$\{segment}
+
+        - id: admin_comments_route
+          uri: lb://main-service
+          predicates:
+            - Path=/admin/comments/**
+          filters:
+            - RewritePath=/admin/comments/(?<segment>.*), /admin/comments/$\{segment}
+
+        - id: stats_hit_route
+          uri: lb://stats-service
+          predicates:
+            - Path=/hit
+            - Method=POST
+          filters:
+            - RewritePath=/hit, /hit
+            - name: Retry
+              args:
+                retries: 3
+                statuses: INTERNAL_SERVER_ERROR, BAD_GATEWAY, SERVICE_UNAVAILABLE, GATEWAY_TIMEOUT
+                methods: POST
+                backoff:
+                  firstBackoff: 100ms
+                  maxBackoff: 1s
+                  factor: 2
+
+        - id: stats_get_route
+          uri: lb://stats-service
+          predicates:
+            - Path=/stats
+            - Method=GET
+          filters:
+            - RewritePath=/stats, /stats
+            - name: Retry
+              args:
+                retries: 3
+                statuses: INTERNAL_SERVER_ERROR, BAD_GATEWAY, SERVICE_UNAVAILABLE, GATEWAY_TIMEOUT
+                methods: GET
+                backoff:
+                  firstBackoff: 100ms
+                  maxBackoff: 1s
+                  factor: 2
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      adminCategoriesCircuitBreaker:
+        slidingWindowSize: 10
+        minimumNumberOfCalls: 5
+        failureRateThreshold: 50
+        waitDurationInOpenState: 5s
+      adminEventsCircuitBreaker:
+        slidingWindowSize: 10
+        minimumNumberOfCalls: 5
+        failureRateThreshold: 50
+        waitDurationInOpenState: 5s
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_SERVER_URL:http://localhost:8761/eureka/}
+    fetch-registry: true
+    register-with-eureka: true
+    registry-fetch-interval-seconds: 5
+  instance:
+    hostname: ${HOSTNAME:localhost}
+    prefer-ip-address: true
+    lease-renewal-interval-in-seconds: 5
+    lease-expiration-duration-in-seconds: 10
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,gateway
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: always
+    gateway:
+      enabled: true
+
+logging:
+  level:
+    org.springframework.cloud.gateway: INFO
+    reactor.netty.http.client: INFO
+    ru.practicum.gatewayserver: DEBUG
