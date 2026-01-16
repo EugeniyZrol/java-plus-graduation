@@ -2,6 +2,8 @@ package client;
 
 import model.EndpointHitDto;
 import model.ViewStatsDto;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.cloud.client.ServiceInstance;
 import org.springframework.cloud.client.discovery.DiscoveryClient;
 import org.springframework.core.ParameterizedTypeReference;
@@ -20,17 +22,21 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 
+@Slf4j
 @Component
 public class StatsClient {
-    private static final String STATS_SERVICE_ID = "stats-server";
     private static final DateTimeFormatter FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     private final DiscoveryClient discoveryClient;
     private final RestClient restClient;
+    private final StatsClientProperties properties;
 
-    public StatsClient(DiscoveryClient discoveryClient, RestClient.Builder restClientBuilder) {
+    public StatsClient(DiscoveryClient discoveryClient,
+                       RestClient.Builder restClientBuilder,
+                       StatsClientProperties properties) {
         this.discoveryClient = discoveryClient;
         this.restClient = restClientBuilder.build();
+        this.properties = properties;
     }
 
     @Retryable(
@@ -39,10 +45,10 @@ public class StatsClient {
             backoff = @Backoff(delay = 3000)
     )
     private ServiceInstance getStatsServiceInstance() {
-        List<ServiceInstance> instances = discoveryClient.getInstances(STATS_SERVICE_ID);
+        List<ServiceInstance> instances = discoveryClient.getInstances(properties.getServiceId());
         if (instances == null || instances.isEmpty()) {
             throw new StatsServerUnavailableException(
-                    "Сервис статистики не найден в службе обнаружения. Service ID: " + STATS_SERVICE_ID
+                    "Сервис статистики не найден в службе обнаружения. Service ID: " + properties.getServiceId()
             );
         }
         return instances.getFirst();
@@ -51,11 +57,14 @@ public class StatsClient {
     private URI buildStatsUri(String path) {
         ServiceInstance instance = getStatsServiceInstance();
 
+        String fullPath = properties.getEndpointPath() +
+                (path.startsWith("/") ? path : "/" + path);
+
         return UriComponentsBuilder.newInstance()
                 .scheme("http")
                 .host(instance.getHost())
                 .port(instance.getPort())
-                .path(path.startsWith("/") ? path : "/" + path)
+                .path(fullPath)
                 .build()
                 .toUri();
     }
@@ -64,16 +73,21 @@ public class StatsClient {
         try {
             URI hitUri = buildStatsUri("/hit");
 
+            log.debug("Отправка hit статистики: {}, URI: {}", endpointHitDto, hitUri);
+
             restClient.post()
                     .uri(hitUri)
                     .contentType(MediaType.APPLICATION_JSON)
                     .body(endpointHitDto)
                     .retrieve()
                     .toBodilessEntity();
+
+            log.debug("Hit статистики успешно отправлен");
+
         } catch (StatsServerUnavailableException e) {
-            System.err.println("Сервис статистики недоступен: " + e.getMessage());
+            log.warn("Сервис статистики недоступен: {}", e.getMessage());
         } catch (Exception e) {
-            System.err.println("Ошибка при отправке статистики: " + e.getMessage());
+            log.error("Ошибка при отправке статистики", e);
         }
     }
 
@@ -82,11 +96,13 @@ public class StatsClient {
         try {
             ServiceInstance instance = getStatsServiceInstance();
 
+            String basePath = properties.getEndpointPath() + "/stats";
+
             UriComponentsBuilder builder = UriComponentsBuilder.newInstance()
                     .scheme("http")
                     .host(instance.getHost())
                     .port(instance.getPort())
-                    .path("/stats");
+                    .path(basePath);
 
             builder.queryParam("start", start.format(FORMATTER))
                     .queryParam("end", end.format(FORMATTER))
@@ -100,6 +116,9 @@ public class StatsClient {
 
             URI url = builder.build().toUri();
 
+            log.debug("Запрос статистики: start={}, end={}, uris={}, unique={}, url={}",
+                    start, end, uris, unique, url);
+
             RestTemplate restTemplate = new RestTemplate();
             ResponseEntity<List<ViewStatsDto>> response = restTemplate.exchange(
                     url,
@@ -108,13 +127,16 @@ public class StatsClient {
                     new ParameterizedTypeReference<List<ViewStatsDto>>() {}
             );
 
-            return response.getBody();
+            List<ViewStatsDto> result = response.getBody();
+            log.debug("Получено {} записей статистики", result != null ? result.size() : 0);
+
+            return result != null ? result : List.of();
+
         } catch (StatsServerUnavailableException e) {
-            System.err.println("Сервис статистики недоступен: " + e.getMessage());
+            log.warn("Сервис статистики недоступен: {}", e.getMessage());
             return List.of();
         } catch (Exception e) {
-            System.err.println("Ошибка при получении статистики: " + e.getMessage());
-            e.printStackTrace();
+            log.error("Ошибка при получении статистики", e);
             return List.of();
         }
     }
