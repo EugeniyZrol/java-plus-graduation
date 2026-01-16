@@ -1,0 +1,3 @@
+stats-client:
+  service-id: ${STATS_SERVICE_NAME:stats-server}
+  endpoint-path: ${STATS_SERVICE_ENDPOINT:}

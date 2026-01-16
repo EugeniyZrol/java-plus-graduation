@@ -1,4 +1,3 @@
-version: '3.8'
 services:
   stats-db:
     image: postgres:13-alpine
@@ -29,29 +28,3 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-
-  stats-server:
-    build: ./stats/stats-server
-    container_name: ewm_stats_service
-    environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://stats-db:5432/stats
-      SPRING_DATASOURCE_USERNAME: user
-      SPRING_DATASOURCE_PASSWORD: password
-    ports:
-      - "9090:9090"
-    depends_on:
-      - stats-db
-
-  ewm-service:
-    build: ./main-service
-    container_name: ewm-service
-    environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://main-db:5432/main
-      SPRING_DATASOURCE_USERNAME: user
-      SPRING_DATASOURCE_PASSWORD: password
-      STATS_SERVER_URL: http://stats-server:9090
-    ports:
-      - "8080:8080"
-    depends_on:
-      - stats-server
-      - main-db

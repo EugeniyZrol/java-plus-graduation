@@ -10,7 +10,7 @@
         <relativePath>../pom.xml</relativePath>
     </parent>
 
-    <artifactId>infra</artifactId>
+    <artifactId>core</artifactId>
     <packaging>pom</packaging>
 
     <properties>
@@ -20,9 +20,22 @@
     </properties>
 
     <modules>
-        <module>config-server</module>
-        <module>discovery-server</module>
-        <module>gateway-server</module>
+        <module>main-service</module>
     </modules>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>ru.practicum</groupId>
+                <artifactId>stats-client</artifactId>
+                <version>0.0.1-SNAPSHOT</version>
+            </dependency>
+            <dependency>
+                <groupId>ru.practicum</groupId>
+                <artifactId>stats-dto</artifactId>
+                <version>0.0.1-SNAPSHOT</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
 
 </project>
