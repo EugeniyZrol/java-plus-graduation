@@ -10,6 +10,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.web.bind.annotation.*;
+import ru.practicum.interaction.enums.event.StateAction;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -43,6 +44,21 @@ public class AdminEventController {
     @PatchMapping("/{eventId}")
     public EventFullDto updateEvent(@PathVariable Long eventId,
                                     @Valid @RequestBody UpdateEventAdminRequest request) {
+        return adminEventService.updateEvent(eventId, request);
+    }
+    @PatchMapping("/{eventId}/publish")
+    public EventFullDto publishEvent(@PathVariable Long eventId) {
+        UpdateEventAdminRequest request = UpdateEventAdminRequest.builder()
+                .stateAction(StateAction.PUBLISH_EVENT.toString())
+                .build();
+        return adminEventService.updateEvent(eventId, request);
+    }
+
+    @PatchMapping("/{eventId}/reject")
+    public EventFullDto rejectEvent(@PathVariable Long eventId) {
+        UpdateEventAdminRequest request = UpdateEventAdminRequest.builder()
+                .stateAction(StateAction.REJECT_EVENT.toString())
+                .build();
         return adminEventService.updateEvent(eventId, request);
     }
 }

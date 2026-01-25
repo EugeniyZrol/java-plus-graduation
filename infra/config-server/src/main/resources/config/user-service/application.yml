@@ -34,11 +34,15 @@ feign:
 
 resilience4j:
   circuitbreaker:
-    instances:
-      event-service:
+    configs:
+      default:
         sliding-window-size: 10
         failure-rate-threshold: 50
-        wait-duration-in-open-state: 5s
+        wait-duration-in-open-state: 10s
+
+    instances:
+      eventServiceCircuitBreaker:
+        base-config: default
 
 management:
   endpoints:

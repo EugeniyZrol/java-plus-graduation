@@ -25,39 +25,61 @@ spring:
   jackson:
     time-zone: UTC
 
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+        record-exceptions:
+          - org.springframework.web.client.HttpServerErrorException
+          - java.io.IOException
+          - java.util.concurrent.TimeoutException
+          - org.springframework.cloud.client.circuitbreaker.NoFallbackAvailableException
+        ignore-exceptions:
+          - ru.practicum.interaction.exception.NotFoundException
+          - ru.practicum.interaction.exception.ConflictException
+
+    instances:
+      userServiceCircuitBreaker:
+        base-config: default
+        register-health-indicator: true
+      requestServiceCircuitBreaker:
+        base-config: default
+        register-health-indicator: true
+
+  retry:
+    configs:
+      default:
+        max-attempts: 3
+        wait-duration: 1s
+        retry-exceptions:
+          - org.springframework.web.client.HttpServerErrorException
+          - java.io.IOException
+          - java.util.concurrent.TimeoutException
+
+    instances:
+      userServiceRetry:
+        base-config: default
+      requestServiceRetry:
+        base-config: default
+
 feign:
+  circuitbreaker:
+    enabled: true
   client:
     config:
       default:
-        connectTimeout: 5000
-        readTimeout: 5000
-        loggerLevel: basic
-  circuitbreaker:
+        connect-timeout: 5000
+        read-timeout: 5000
+        logger-level: basic
+  httpclient:
     enabled: true
-
-resilience4j:
-  circuitbreaker:
-    instances:
-      user-service:
-        register-health-indicator: true
-        sliding-window-size: 10
-        failure-rate-threshold: 50
-        wait-duration-in-open-state: 5s
-        permitted-number-of-calls-in-half-open-state: 3
-      request-service:
-        sliding-window-size: 10
-        failure-rate-threshold: 50
-        wait-duration-in-open-state: 5s
-      comment-service:
-        sliding-window-size: 10
-        failure-rate-threshold: 50
-        wait-duration-in-open-state: 5s
-  config:
-    instance:
-      user-service:
-        baseConfig: default
-      request-service:
-        baseConfig: default
+    max-connections: 200
+    time-to-live: 900000
 
 management:
   endpoints:

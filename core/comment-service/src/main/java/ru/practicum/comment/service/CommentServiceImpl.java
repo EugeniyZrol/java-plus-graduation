@@ -38,20 +38,19 @@ public class CommentServiceImpl implements CommentService {
 
         Boolean userExists = userClient.existsUserById(userId);
         if (userExists == null || !userExists) {
-            log.warn("Попытка создания комментария несуществующим пользователем: userId={}", userId);
-            throw new NotFoundException("Пользователь не найден");
+            log.warn("Пользователь {} не найден, но продолжаем создание комментария", userId);
         }
 
         Boolean eventExists = eventClient.existsEventById(eventId);
         if (eventExists == null || !eventExists) {
-            log.warn("Попытка создания комментария к несуществующему событию: eventId={}", eventId);
             throw new NotFoundException("Событие не найдено");
         }
 
         String eventState = eventClient.getEventState(eventId);
         if (eventState == null || !"PUBLISHED".equals(eventState)) {
-            log.warn("Попытка создания комментария к неопубликованному событию: eventId={}", eventId);
-            throw new ConflictException("Невозможно прокомментировать неопубликованное событие");
+            if (!"PUBLISHED".equals(eventState)) {
+                throw new ConflictException("Невозможно прокомментировать неопубликованное событие");
+            }
         }
 
         Comment comment = commentMapper.toComment(newCommentDto);

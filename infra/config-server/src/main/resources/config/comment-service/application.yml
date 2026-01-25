@@ -53,18 +53,28 @@ resilience4j:
         sliding-window-size: 10
         failure-rate-threshold: 50
         wait-duration-in-open-state: 5s
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
       eventServiceCircuitBreaker:
         sliding-window-size: 10
         failure-rate-threshold: 50
         wait-duration-in-open-state: 5s
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
   retry:
     instances:
       userServiceRetry:
         max-attempts: 3
         wait-duration: 500ms
+        retry-exceptions:
+          - org.springframework.web.client.ResourceAccessException
+          - feign.RetryableException
       eventServiceRetry:
         max-attempts: 3
         wait-duration: 500ms
+        retry-exceptions:
+          - org.springframework.web.client.ResourceAccessException
+          - feign.RetryableException
 
 eureka:
   client:
