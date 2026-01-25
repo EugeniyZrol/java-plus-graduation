@@ -6,7 +6,7 @@ spring:
     name: comment-service
 
   datasource:
-    url: jdbc:postgresql://localhost:6542/main
+    url: jdbc:postgresql://localhost:5432/main
     username: user
     password: password
     driver-class-name: org.postgresql.Driver
