@@ -10,17 +10,18 @@ spring:
     username: user
     password: password
 
-    jpa:
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    properties:
       hibernate:
-        ddl-auto: create-drop
-      properties:
-        hibernate:
-          default_schema: userservice
+        default_schema: userservice
+        dialect: org.hibernate.dialect.PostgreSQLDialect
 
-    sql:
-      init:
-        mode: always
-        schema-locations: classpath:schema.sql
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema.sql
 
 feign:
   client:
