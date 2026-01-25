@@ -66,80 +66,142 @@ spring:
             - Path=/comments/{commentId}
             - Method=GET
 
-        # ======================= АДМИН =======================
+        # ======================= АДМИН USERS =======================
         - id: admin_users_route
           uri: lb://user-service
           predicates:
             - Path=/admin/users/**
 
+        # ======================= АДМИН CATEGORIES =======================
         - id: admin_categories_route
           uri: lb://event-service
           predicates:
             - Path=/admin/categories/**
 
+        - id: admin_categories_id_route
+          uri: lb://event-service
+          predicates:
+            - Path=/admin/categories/{catId}
+            - Method=DELETE,PATCH
+
+        # ======================= АДМИН EVENTS =======================
         - id: admin_events_route
           uri: lb://event-service
           predicates:
             - Path=/admin/events/**
 
+        - id: admin_events_search_route
+          uri: lb://event-service
+          predicates:
+            - Path=/admin/events
+            - Method=GET
+
+        - id: admin_events_id_route
+          uri: lb://event-service
+          predicates:
+            - Path=/admin/events/{eventId}
+            - Method=GET,PATCH
+
+        - id: admin_events_publish_route
+          uri: lb://event-service
+          predicates:
+            - Path=/admin/events/{eventId}/publish
+            - Method=PATCH
+
+        - id: admin_events_reject_route
+          uri: lb://event-service
+          predicates:
+            - Path=/admin/events/{eventId}/reject
+            - Method=PATCH
+
+        # ======================= АДМИН COMPILATIONS =======================
         - id: admin_compilations_route
           uri: lb://event-service
           predicates:
             - Path=/admin/compilations/**
 
+        - id: admin_compilations_id_route
+          uri: lb://event-service
+          predicates:
+            - Path=/admin/compilations/{compId}
+            - Method=DELETE,PATCH
+
+        # ======================= АДМИН COMMENTS =======================
         - id: admin_comments_route
           uri: lb://comment-service
           predicates:
             - Path=/admin/comments/**
 
-        # ======================= ПРИВАТНЫЕ =======================
-        - id: private_event_requests_route
-          uri: lb://request-service
-          predicates:
-            - Path=/users/{userId}/events/{eventId}/requests
-            - Method=GET,PATCH
-
-        - id: private_user_events_with_id_route
-          uri: lb://event-service
-          predicates:
-            - Path=/users/{userId}/events/{eventId}
-            - Method=GET,PATCH
-
+        # ======================= ПРИВАТНЫЕ USERS EVENTS =======================
         - id: private_user_events_route
           uri: lb://event-service
           predicates:
             - Path=/users/{userId}/events
             - Method=GET,POST
 
-        - id: private_user_requests_with_id_route
-          uri: lb://request-service
+        - id: private_user_events_id_route
+          uri: lb://event-service
           predicates:
-            - Path=/users/{userId}/requests/{requestId}/cancel
-            - Method=PATCH
+            - Path=/users/{userId}/events/{eventId}
+            - Method=GET,PATCH
 
+        # ======================= ПРИВАТНЫЕ USERS REQUESTS =======================
         - id: private_user_requests_route
           uri: lb://request-service
           predicates:
             - Path=/users/{userId}/requests
             - Method=GET,POST
 
-        # ======================= ПУБЛИЧНЫЕ =======================
+        - id: private_user_requests_cancel_route
+          uri: lb://request-service
+          predicates:
+            - Path=/users/{userId}/requests/{requestId}/cancel
+            - Method=PATCH
+
+        # ======================= ПРИВАТНЫЕ EVENT REQUESTS =======================
+        - id: private_event_requests_route
+          uri: lb://request-service
+          predicates:
+            - Path=/users/{userId}/events/{eventId}/requests
+            - Method=GET,PATCH
+
+        # ======================= ПУБЛИЧНЫЕ CATEGORIES =======================
         - id: public_categories_route
           uri: lb://event-service
           predicates:
-            - Path=/categories/**
+            - Path=/categories
             - Method=GET
 
+        - id: public_categories_id_route
+          uri: lb://event-service
+          predicates:
+            - Path=/categories/{catId}
+            - Method=GET
+
+        # ======================= ПУБЛИЧНЫЕ COMPILATIONS =======================
         - id: public_compilations_route
           uri: lb://event-service
           predicates:
-            - Path=/compilations/**
+            - Path=/compilations
             - Method=GET
 
+        - id: public_compilations_id_route
+          uri: lb://event-service
+          predicates:
+            - Path=/compilations/{compId}
+            - Method=GET
+
+        # ======================= ПУБЛИЧНЫЕ EVENTS =======================
         - id: public_events_route
           uri: lb://event-service
           predicates:
-            - Path=/events/**
+            - Path=/events
+            - Method=GET
+
+        - id: public_events_id_route
+          uri: lb://event-service
+          predicates:
+            - Path=/events/{eventId}
             - Method=GET
 
         # ======================= СТАТИСТИКА =======================
