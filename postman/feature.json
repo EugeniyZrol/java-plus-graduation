@@ -49,12 +49,14 @@
 									"        };",
 									"        ",
 									"        const comment = await api.post(",
-									"            `/users/${user.id}/comments/event/${event.id}`, ",
-									"            commentData, ",
+									"            `/users/${user.id}/comments/event/${event.id}`,",
+									"            commentData,",
 									"            pm.collectionVariables.get(\"baseUrl\")",
 									"        );",
 									"        ",
 									"        pm.collectionVariables.set(\"adminCommentId\", comment.id);",
+									"        pm.collectionVariables.set(\"adminUserId\", user.id);",
+									"        pm.collectionVariables.set(\"adminEventId\", event.id);",
 									"        console.log(\"Создан комментарий для административного удаления:\", comment.id);",
 									"        ",
 									"    } catch(err) {",
@@ -104,18 +106,14 @@
 									"    const rnd = new RandomUtils();",
 									"    ",
 									"    try {",
-									"        // Создаем пользователя и событие",
 									"        const user = await api.addUser(rnd.getUser());",
 									"        const category = await api.addCategory(rnd.getCategory());",
 									"        let event = await api.addEvent(user.id, rnd.getEvent(category.id));",
 									"        event = await api.publishEvent(event.id);",
 									"        ",
-									"        // Сохраняем IDs для использования в тестах",
-									"        pm.collectionVariables.set(\"userId\", user.id);",
-									"        pm.collectionVariables.set(\"eventId\", event.id);",
-									"        pm.collectionVariables.set(\"userEmail\", user.email);",
+									"        pm.collectionVariables.set(\"privateUserId\", user.id);",
+									"        pm.collectionVariables.set(\"privateEventId\", event.id);",
 									"        ",
-									"        // Подготавливаем данные комментария",
 									"        const commentData = {",
 									"            text: \"Отличное мероприятие! Очень понравилась организация и атмосфера.\"",
 									"        };",
@@ -142,7 +140,6 @@
 							"listen": "test",
 							"script": {
 								"exec": [
-									"// Проверка успешного создания комментария",
 									"pm.test(\"Статус код должен быть 201\", function () {",
 									"    pm.response.to.have.status(201);",
 									"});",
@@ -156,8 +153,7 @@
 									"    pm.expect(response).to.have.property('createdDate');",
 									"    pm.expect(response).to.have.property('isEdited', false);",
 									"    ",
-									"    // Сохраняем ID комментария для последующих тестов",
-									"    pm.collectionVariables.set(\"commentId\", response.id);",
+									"    pm.collectionVariables.set(\"privateCommentId\", response.id);",
 									"});",
 									"",
 									"pm.test(\"Текст комментария должен соответствовать отправленному\", function () {",
@@ -168,7 +164,7 @@
 									"",
 									"pm.test(\"ID события должно совпадать\", function () {",
 									"    const response = pm.response.json();",
-									"    const eventId = pm.collectionVariables.get(\"eventId\");",
+									"    const eventId = pm.collectionVariables.get(\"privateEventId\");",
 									"    pm.expect(response.eventId).to.equal(parseInt(eventId));",
 									"});"
 								],
@@ -194,16 +190,16 @@
 							}
 						},
 						"url": {
-							"raw": "{{baseUrl}}/users/{{userId}}/comments/event/{{eventId}}",
+							"raw": "{{baseUrl}}/users/{{privateUserId}}/comments/event/{{privateEventId}}",
 							"host": [
 								"{{baseUrl}}"
 							],
 							"path": [
 								"users",
-								"{{userId}}",
+								"{{privateUserId}}",
 								"comments",
 								"event",
-								"{{eventId}}"
+								"{{privateEventId}}"
 							]
 						}
 					},
@@ -222,7 +218,7 @@
 									"",
 									"pm.test(\"Ответ должен быть массивом комментариев пользователя\", function () {",
 									"    const response = pm.response.json();",
-									"    const userId = pm.collectionVariables.get(\"userId\");",
+									"    const userId = pm.collectionVariables.get(\"privateUserId\");",
 									"    ",
 									"    pm.expect(response).to.be.an('array');",
 									"    ",
@@ -239,13 +235,13 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{baseUrl}}/users/{{userId}}/comments?from=0&size=10",
+							"raw": "{{baseUrl}}/users/{{privateUserId}}/comments?from=0&size=10",
 							"host": [
 								"{{baseUrl}}"
 							],
 							"path": [
 								"users",
-								"{{userId}}",
+								"{{privateUserId}}",
 								"comments"
 							],
 							"query": [
@@ -326,15 +322,15 @@
 							}
 						},
 						"url": {
-							"raw": "{{baseUrl}}/users/{{userId}}/comments/{{commentId}}",
+							"raw": "{{baseUrl}}/users/{{privateUserId}}/comments/{{privateCommentId}}",
 							"host": [
 								"{{baseUrl}}"
 							],
 							"path": [
 								"users",
-								"{{userId}}",
+								"{{privateUserId}}",
 								"comments",
-								"{{commentId}}"
+								"{{privateCommentId}}"
 							]
 						}
 					},
@@ -363,15 +359,15 @@
 						"method": "DELETE",
 						"header": [],
 						"url": {
-							"raw": "{{baseUrl}}/users/{{userId}}/comments/{{commentId}}",
+							"raw": "{{baseUrl}}/users/{{privateUserId}}/comments/{{privateCommentId}}",
 							"host": [
 								"{{baseUrl}}"
 							],
 							"path": [
 								"users",
-								"{{userId}}",
+								"{{privateUserId}}",
 								"comments",
-								"{{commentId}}"
+								"{{privateCommentId}}"
 							]
 						}
 					},
@@ -395,7 +391,7 @@
 									"",
 									"pm.test(\"Ответ должен содержать корректные данные комментария\", function () {",
 									"    const response = pm.response.json();",
-									"    const commentId = pm.collectionVariables.get(\"commentId\");",
+									"    const commentId = pm.collectionVariables.get(\"publicCommentId\");",
 									"    ",
 									"    pm.expect(response.id).to.equal(parseInt(commentId));",
 									"    pm.expect(response).to.have.property('text');",
@@ -435,9 +431,9 @@
 									"            pm.collectionVariables.get(\"baseUrl\")",
 									"        );",
 									"",
-									"        pm.collectionVariables.set(\"commentId\", comment.id);",
-									"        pm.collectionVariables.set(\"eventId\", event.id);",
-									"        pm.collectionVariables.set(\"userId\", user.id);",
+									"        pm.collectionVariables.set(\"publicCommentId\", comment.id);",
+									"        pm.collectionVariables.set(\"publicEventId\", event.id);",
+									"        pm.collectionVariables.set(\"publicUserId\", user.id);",
 									"        console.log(\"Создан комментарий для Public comments:\", comment.id);",
 									"",
 									"    } catch (err) {",
@@ -457,13 +453,13 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{baseUrl}}/comments/{{commentId}}",
+							"raw": "{{baseUrl}}/comments/{{publicCommentId}}",
 							"host": [
 								"{{baseUrl}}"
 							],
 							"path": [
 								"comments",
-								"{{commentId}}"
+								"{{publicCommentId}}"
 							]
 						}
 					},
@@ -488,7 +484,7 @@
 									"",
 									"pm.test(\"Комментарии должны принадлежать указанному событию\", function () {",
 									"    const response = pm.response.json();",
-									"    const eventId = pm.collectionVariables.get(\"eventId\");",
+									"    const eventId = pm.collectionVariables.get(\"publicEventId\");",
 									"    ",
 									"    response.forEach(comment => {",
 									"        pm.expect(comment.eventId).to.equal(parseInt(eventId));",
@@ -512,14 +508,14 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{baseUrl}}/comments/event/{{eventId}}?from=0&size=10",
+							"raw": "{{baseUrl}}/comments/event/{{publicEventId}}?from=0&size=10",
 							"host": [
 								"{{baseUrl}}"
 							],
 							"path": [
 								"comments",
 								"event",
-								"{{eventId}}"
+								"{{publicEventId}}"
 							],
 							"query": [
 								{
@@ -562,11 +558,11 @@
 							"script": {
 								"exec": [
 									"const baseUrl = pm.collectionVariables.get('baseUrl');",
-									"const userId = pm.collectionVariables.get('userId');",
-									"const commentId = pm.collectionVariables.get('commentId');",
+									"const publicUserId = pm.collectionVariables.get('publicUserId');",
+									"const publicCommentId = pm.collectionVariables.get('publicCommentId');",
 									"",
 									"const deleteCommentOption = {",
-									"    url: `${baseUrl}/users/${userId}/comments/${commentId}`,",
+									"    url: `${baseUrl}/users/${publicUserId}/comments/${publicCommentId}`,",
 									"    method: 'DELETE'",
 									"};",
 									"",
@@ -593,13 +589,13 @@
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{baseUrl}}/comments/{{commentId}}",
+							"raw": "{{baseUrl}}/comments/{{publicCommentId}}",
 							"host": [
 								"{{baseUrl}}"
 							],
 							"path": [
 								"comments",
-								"{{commentId}}"
+								"{{publicCommentId}}"
 							]
 						}
 					},
@@ -617,7 +613,26 @@
 							"listen": "prerequest",
 							"script": {
 								"exec": [
-									"// Создаем комментарий длиннее 2000 символов",
+									"const prepareValidationTest = async () => {",
+									"    const api = new API(pm);",
+									"    const rnd = new RandomUtils();",
+									"    ",
+									"    try {",
+									"        const user = await api.addUser(rnd.getUser());",
+									"        const category = await api.addCategory(rnd.getCategory());",
+									"        let event = await api.addEvent(user.id, rnd.getEvent(category.id));",
+									"        event = await api.publishEvent(event.id);",
+									"        ",
+									"        pm.collectionVariables.set(\"validationUserId\", user.id);",
+									"        pm.collectionVariables.set(\"validationEventId\", event.id);",
+									"        console.log(\"Подготовлены данные для валидации\");",
+									"    } catch(err) {",
+									"        console.error(\"Ошибка при подготовке теста валидации:\", err);",
+									"    }",
+									"};",
+									"",
+									"prepareValidationTest();",
+									"",
 									"const longText = 'a'.repeat(2001);",
 									"const invalidComment = {",
 									"    text: longText",
@@ -662,16 +677,16 @@
 							}
 						},
 						"url": {
-							"raw": "{{baseUrl}}/users/{{userId}}/comments/event/{{eventId}}",
+							"raw": "{{baseUrl}}/users/{{validationUserId}}/comments/event/{{validationEventId}}",
 							"host": [
 								"{{baseUrl}}"
 							],
 							"path": [
 								"users",
-								"{{userId}}",
+								"{{validationUserId}}",
 								"comments",
 								"event",
-								"{{eventId}}"
+								"{{validationEventId}}"
 							]
 						}
 					},
@@ -727,16 +742,16 @@
 							}
 						},
 						"url": {
-							"raw": "{{baseUrl}}/users/{{userId}}/comments/event/{{eventId}}",
+							"raw": "{{baseUrl}}/users/{{validationUserId}}/comments/event/{{validationEventId}}",
 							"host": [
 								"{{baseUrl}}"
 							],
 							"path": [
 								"users",
-								"{{userId}}",
+								"{{validationUserId}}",
 								"comments",
 								"event",
-								"{{eventId}}"
+								"{{validationEventId}}"
 							]
 						}
 					},
@@ -751,7 +766,6 @@
 			"script": {
 				"type": "text/javascript",
 				"exec": [
-					"// Класс для работы с API ",
 					"API = class {",
 					"    constructor(postman, verbose = false, baseUrl = \"http://localhost:8080\") {",
 					"        this.baseUrl = baseUrl;",
@@ -877,15 +891,35 @@
 			"type": "string"
 		},
 		{
-			"key": "userId",
+			"key": "privateUserId",
 			"value": ""
 		},
 		{
-			"key": "eventId",
+			"key": "privateEventId",
 			"value": ""
 		},
 		{
-			"key": "commentId",
+			"key": "privateCommentId",
+			"value": ""
+		},
+		{
+			"key": "publicUserId",
+			"value": ""
+		},
+		{
+			"key": "publicEventId",
+			"value": ""
+		},
+		{
+			"key": "publicCommentId",
+			"value": ""
+		},
+		{
+			"key": "adminUserId",
+			"value": ""
+		},
+		{
+			"key": "adminEventId",
 			"value": ""
 		},
 		{
@@ -893,7 +927,11 @@
 			"value": ""
 		},
 		{
-			"key": "userEmail",
+			"key": "validationUserId",
+			"value": ""
+		},
+		{
+			"key": "validationEventId",
 			"value": ""
 		}
 	]
