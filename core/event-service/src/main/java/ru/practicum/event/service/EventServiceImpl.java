@@ -257,4 +257,10 @@ public class EventServiceImpl implements EventService {
         }
         return eventRepository.countByIdIn(eventIds) == eventIds.size();
     }
+
+    @Override
+    public Event getEventByIdForFeign(Long eventId) {
+        return eventRepository.findById(eventId)
+                .orElseThrow(() -> new NotFoundException("Event not found with id: " + eventId));
+    }
 }

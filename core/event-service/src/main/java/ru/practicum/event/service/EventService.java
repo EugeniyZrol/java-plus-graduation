@@ -33,4 +33,6 @@ public interface EventService {
     Boolean isRequestModerationEnabled(Long eventId);
 
     String getEventState(Long eventId);
+
+    Event getEventByIdForFeign(Long eventId);
 }
