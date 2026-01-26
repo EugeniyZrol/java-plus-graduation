@@ -16,6 +16,8 @@ import ru.practicum.interaction.exception.NotFoundException;
 import ru.practicum.interaction.exception.ConflictException;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -123,5 +125,22 @@ public class UserServiceImpl implements UserService {
                 });
         log.debug("Сущность пользователя с ID {} получена", userId);
         return user;
+    }
+
+    @Override
+    public Map<Long, UserShortDto> getUserShortDtoMapByIds(Set<Long> userIds) {
+        if (userIds == null || userIds.isEmpty()) {
+            return Map.of();
+        }
+
+        List<User> users = userRepository.findAllById(userIds);
+        return users.stream()
+                .collect(Collectors.toMap(
+                        User::getId,
+                        user -> UserShortDto.builder()
+                                .id(user.getId())
+                                .name(user.getName())
+                                .build()
+                ));
     }
 }

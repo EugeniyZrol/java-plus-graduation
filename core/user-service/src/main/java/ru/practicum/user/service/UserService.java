@@ -7,6 +7,8 @@ import ru.practicum.user.model.User;
 import org.springframework.data.domain.Pageable;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 public interface UserService {
     UserResponse createUser(NewUserRequest userRequest);
@@ -24,4 +26,6 @@ public interface UserService {
     User getUserEntityById(Long userId);
 
     void checkUserExists(Long userId);
+
+    Map<Long, UserShortDto> getUserShortDtoMapByIds(Set<Long> userIds);
 }
