@@ -52,7 +52,7 @@ public class EventInternalController {
                 .toList();
 
         return publishedEvents.stream()
-                .map(eventMapper::toShortDto)
+                .map(eventMapper::toShortDtoWithoutRelations)
                 .collect(Collectors.toList());
     }
 }
