@@ -9,7 +9,7 @@ import ru.practicum.user.service.UserService;
 @RestController
 @RequestMapping("/users/feign")
 @RequiredArgsConstructor
-public class UserFeignController {
+public class UserInternalController {
     private final UserService userService;
 
     @GetMapping("/{userId}/exists")

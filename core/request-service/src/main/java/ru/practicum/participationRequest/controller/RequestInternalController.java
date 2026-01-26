@@ -14,7 +14,7 @@ import java.util.stream.Collectors;
 @RestController
 @RequestMapping("/requests/feign")
 @RequiredArgsConstructor
-public class RequestFeignController {
+public class RequestInternalController {
     private final ParticipationRequestService requestService;
     private final RequestStatsService requestStatsService;
 
@@ -27,11 +27,6 @@ public class RequestFeignController {
 
     @GetMapping("/events/{eventId}/confirmed/count")
     public Integer getConfirmedRequestsCount(@PathVariable Long eventId) {
-        try {
-            return requestService.getConfirmedRequestsCountForFeign(eventId);
-        } catch (Exception e) {
-            log.warn("Ошибка при получении подтвержденных запросов для события {}, возвращаем 0", eventId, e);
-            return 0;
-        }
+        return requestService.getConfirmedRequestsCountForFeign(eventId);
     }
 }

@@ -3,7 +3,9 @@ package ru.practicum.event.service;
 import ru.practicum.categories.service.CategoryService;
 import ru.practicum.event.repository.specification.EventSpecifications;
 import ru.practicum.interaction.client.feign.UserClient;
+import ru.practicum.interaction.dto.categories.CategoryDto;
 import ru.practicum.interaction.dto.event.*;
+import ru.practicum.interaction.dto.user.UserShortDto;
 import ru.practicum.event.mapper.EventMapper;
 import ru.practicum.event.model.Event;
 import ru.practicum.interaction.enums.event.EventState;
@@ -17,18 +19,17 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import ru.practicum.interaction.exception.NotFoundException;
 
 import java.time.LocalDateTime;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
 @Transactional(readOnly = true)
 public class EventServiceImpl implements EventService {
-
     private final EventRepository eventRepository;
     private final EventMapper eventMapper;
     private final EventStatsService eventStatsService;
@@ -37,27 +38,38 @@ public class EventServiceImpl implements EventService {
 
     @Override
     public List<EventShortDto> getEvents(Long userId, Pageable pageable) {
-        Boolean userExists = userClient.existsUserById(userId);
-        if (Boolean.FALSE.equals(userExists)) {
-            throw new ru.practicum.interaction.exception.NotFoundException("User not found with id: " + userId);
+        if (Boolean.FALSE.equals(userClient.existsUserById(userId))) {
+            throw new NotFoundException("User not found with id: " + userId);
         }
 
         Page<Event> eventsPage = eventRepository.findAllByInitiatorIdOrderByCreatedAtDesc(userId, pageable);
-        return eventStatsService.enrichEventsShortDtoBatch(eventsPage.getContent(), eventMapper);
+        List<Event> events = eventsPage.getContent();
+
+        Map<Long, CategoryDto> categories = categoryService.getCategoriesByIds(
+                events.stream().map(Event::getCategoryId).collect(Collectors.toSet())
+        );
+        Map<Long, UserShortDto> users = userClient.getUsersShortByIds(
+                events.stream().map(Event::getInitiatorId).collect(Collectors.toSet())
+        );
+
+        return eventStatsService.enrichEventsShortDtoBatch(events, categories, users);
     }
 
     @Override
     public EventFullDto getEvent(Long userId, Long eventId, String ip) {
-        Boolean userExists = userClient.existsUserById(userId);
-        if (Boolean.FALSE.equals(userExists)) {
-            throw new ru.practicum.interaction.exception.NotFoundException("User not found with id: " + userId);
+        if (Boolean.FALSE.equals(userClient.existsUserById(userId))) {
+            throw new NotFoundException("User not found with id: " + userId);
         }
 
         Event event = eventRepository.findByIdAndInitiatorId(eventId, userId)
-                .orElseThrow(() -> new ru.practicum.interaction.exception.NotFoundException("Event not found"));
+                .orElseThrow(() -> new NotFoundException("Event not found"));
 
         eventStatsService.recordHit("/events/" + eventId, ip);
-        return eventStatsService.enrichEventFullDto(event, eventMapper);
+
+        CategoryDto category = categoryService.getCategoryById(event.getCategoryId());
+        UserShortDto initiator = userClient.getUserShortById(event.getInitiatorId());
+
+        return eventStatsService.enrichEventFullDto(event, category, initiator);
     }
 
     @Override
@@ -65,17 +77,12 @@ public class EventServiceImpl implements EventService {
     public EventFullDto createEvent(Long userId, NewEventDto newEventDto) {
         EventValidationUtils.validateEventDate(newEventDto.getEventDate(), 2);
 
-        Boolean userExists = userClient.existsUserById(userId);
-        if (Boolean.FALSE.equals(userExists)) {
-            throw new ru.practicum.interaction.exception.NotFoundException("User not found with id: " + userId);
+        if (Boolean.FALSE.equals(userClient.existsUserById(userId))) {
+            throw new NotFoundException("User not found with id: " + userId);
         }
 
         if (newEventDto.getCategory() != null) {
-            try {
-                categoryService.getCategoryById(newEventDto.getCategory());
-            } catch (ru.practicum.interaction.exception.NotFoundException e) {
-                throw new ru.practicum.interaction.exception.NotFoundException("Category not found");
-            }
+            categoryService.getCategoryById(newEventDto.getCategory());
         }
 
         Event event = eventMapper.toEvent(newEventDto);
@@ -85,7 +92,9 @@ public class EventServiceImpl implements EventService {
 
         Event savedEvent = eventRepository.save(event);
 
-        EventFullDto eventDto = eventMapper.toFullDto(savedEvent);
+        CategoryDto category = categoryService.getCategoryById(savedEvent.getCategoryId());
+        UserShortDto initiator = userClient.getUserShortById(savedEvent.getInitiatorId());
+        EventFullDto eventDto = eventMapper.toFullDto(savedEvent, category, initiator);
         eventDto.setConfirmedRequests(0L);
         eventDto.setViews(0L);
         return eventDto;
@@ -94,19 +103,17 @@ public class EventServiceImpl implements EventService {
     @Override
     @Transactional
     public EventFullDto updateEvent(Long userId, Long eventId, UpdateEventUserRequest request) {
-        Boolean userExists = userClient.existsUserById(userId);
-        if (Boolean.FALSE.equals(userExists)) {
-            throw new ru.practicum.interaction.exception.NotFoundException("User not found with id: " + userId);
+        if (Boolean.FALSE.equals(userClient.existsUserById(userId))) {
+            throw new NotFoundException("User not found with id: " + userId);
         }
 
         Event event = eventRepository.findByIdAndInitiatorId(eventId, userId)
-                .orElseThrow(() -> new ru.practicum.interaction.exception.NotFoundException("Event not found"));
+                .orElseThrow(() -> new NotFoundException("Event not found"));
 
         EventValidationInfo validationInfo = EventValidationInfo.builder()
                 .state(event.getState().toString())
                 .eventDate(event.getEventDate())
                 .build();
-
         EventValidationUtils.validateEventStateForUpdate(validationInfo);
 
         if (request.getEventDate() != null) {
@@ -118,11 +125,7 @@ public class EventServiceImpl implements EventService {
         }
 
         if (request.getCategory() != null) {
-            try {
-                categoryService.getCategoryById(request.getCategory());
-            } catch (ru.practicum.interaction.exception.NotFoundException e) {
-                throw new ru.practicum.interaction.exception.NotFoundException("Category not found");
-            }
+            categoryService.getCategoryById(request.getCategory());
         }
 
         eventMapper.updateEventFromUserRequest(request, event);
@@ -137,7 +140,11 @@ public class EventServiceImpl implements EventService {
         }
 
         Event updatedEvent = eventRepository.save(event);
-        return eventStatsService.enrichEventFullDto(updatedEvent, eventMapper);
+
+        CategoryDto category = categoryService.getCategoryById(updatedEvent.getCategoryId());
+        UserShortDto initiator = userClient.getUserShortById(updatedEvent.getInitiatorId());
+
+        return eventStatsService.enrichEventFullDto(updatedEvent, category, initiator);
     }
 
     @Override
@@ -145,22 +152,31 @@ public class EventServiceImpl implements EventService {
         EventValidationUtils.validateDateRange(requestParams.getRangeStart(), requestParams.getRangeEnd());
 
         Specification<Event> spec = buildPublicEventsSpecification(requestParams);
-
         List<Event> events = eventRepository.findAll(spec, pageable).getContent();
-        List<EventShortDto> result = eventStatsService.enrichEventsShortDtoBatch(events, eventMapper);
+
+        Map<Long, CategoryDto> categories = categoryService.getCategoriesByIds(
+                events.stream().map(Event::getCategoryId).collect(Collectors.toSet())
+        );
+        Map<Long, UserShortDto> users = userClient.getUsersShortByIds(
+                events.stream().map(Event::getInitiatorId).collect(Collectors.toSet())
+        );
 
         eventStatsService.recordHit("/events", ip);
-        return result;
+        return eventStatsService.enrichEventsShortDtoBatch(events, categories, users);
     }
 
     @Override
     public EventFullDto getPublicEventById(Long eventId, String ip) {
         Event event = eventRepository.findById(eventId)
                 .filter(e -> EventState.PUBLISHED.equals(e.getState()))
-                .orElseThrow(() -> new ru.practicum.interaction.exception.NotFoundException("Event not found"));
+                .orElseThrow(() -> new NotFoundException("Event not found"));
 
         eventStatsService.recordHit("/events/" + eventId, ip);
-        return eventStatsService.enrichEventFullDto(event, eventMapper);
+
+        CategoryDto category = categoryService.getCategoryById(event.getCategoryId());
+        UserShortDto initiator = userClient.getUserShortById(event.getInitiatorId());
+
+        return eventStatsService.enrichEventFullDto(event, category, initiator);
     }
 
     @Override
@@ -171,8 +187,29 @@ public class EventServiceImpl implements EventService {
     @Override
     public Long getEventInitiatorId(Long eventId) {
         Event event = eventRepository.findById(eventId)
-                .orElseThrow(() -> new ru.practicum.interaction.exception.NotFoundException("Event not found"));
+                .orElseThrow(() -> new NotFoundException("Event not found"));
         return event.getInitiatorId();
+    }
+
+    @Override
+    public String getEventState(Long eventId) {
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new NotFoundException("Event not found"));
+        return event.getState().toString();
+    }
+
+    @Override
+    public Integer getParticipantLimit(Long eventId) {
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new NotFoundException("Event not found"));
+        return event.getParticipantLimit();
+    }
+
+    @Override
+    public Boolean isRequestModerationEnabled(Long eventId) {
+        Event event = eventRepository.findById(eventId)
+                .orElseThrow(() -> new NotFoundException("Event not found"));
+        return event.getIsRequestModeration();
     }
 
     private Specification<Event> buildPublicEventsSpecification(PublicEventSearchRequest params) {
@@ -219,26 +256,5 @@ public class EventServiceImpl implements EventService {
             return true;
         }
         return eventRepository.countByIdIn(eventIds) == eventIds.size();
-    }
-
-    @Override
-    public Integer getParticipantLimit(Long eventId) {
-        Event event = eventRepository.findById(eventId)
-                .orElseThrow(() -> new ru.practicum.interaction.exception.NotFoundException("Event not found"));
-        return event.getParticipantLimit();
-    }
-
-    @Override
-    public Boolean isRequestModerationEnabled(Long eventId) {
-        Event event = eventRepository.findById(eventId)
-                .orElseThrow(() -> new ru.practicum.interaction.exception.NotFoundException("Event not found"));
-        return event.getIsRequestModeration();
-    }
-
-    @Override
-    public String getEventState(Long eventId) {
-        Event event = eventRepository.findById(eventId)
-                .orElseThrow(() -> new ru.practicum.interaction.exception.NotFoundException("Event not found"));
-        return event.getState().toString();
     }
 }

@@ -25,21 +25,14 @@ import java.util.stream.Collectors;
 @Slf4j
 @Transactional(readOnly = true)
 public class CommentServiceImpl implements CommentService {
-
     private final CommentRepository commentRepository;
     private final CommentMapper commentMapper;
     private final UserClient userClient;
     private final EventClient eventClient;
 
     @Override
-    @Transactional
     public CommentDto createComment(Long userId, Long eventId, NewCommentDto newCommentDto) {
         log.debug("Создание нового комментария: userId={}, eventId={}", userId, eventId);
-
-        Boolean userExists = userClient.existsUserById(userId);
-        if (userExists == null || !userExists) {
-            log.warn("Пользователь {} не найден, но продолжаем создание комментария", userId);
-        }
 
         Boolean eventExists = eventClient.existsEventById(eventId);
         if (eventExists == null || !eventExists) {
@@ -47,10 +40,8 @@ public class CommentServiceImpl implements CommentService {
         }
 
         String eventState = eventClient.getEventState(eventId);
-        if (eventState == null || !"PUBLISHED".equals(eventState)) {
-            if (!"PUBLISHED".equals(eventState)) {
-                throw new ConflictException("Невозможно прокомментировать неопубликованное событие");
-            }
+        if (!"PUBLISHED".equals(eventState)) {
+            throw new ConflictException("Невозможно прокомментировать неопубликованное событие");
         }
 
         Comment comment = commentMapper.toComment(newCommentDto);
@@ -58,7 +49,6 @@ public class CommentServiceImpl implements CommentService {
         comment.setEventId(eventId);
 
         Comment savedComment = commentRepository.save(comment);
-
         log.info("Создан новый комментарий: ID={}, authorId={}, eventId={}",
                 savedComment.getId(), userId, eventId);
 
@@ -70,19 +60,12 @@ public class CommentServiceImpl implements CommentService {
     public CommentDto updateComment(Long userId, Long commentId, UpdateCommentDto updateCommentDto) {
         log.debug("Обновление комментария: userId={}, commentId={}", userId, commentId);
 
-        Comment comment = commentRepository.findById(commentId)
-                .orElseThrow(() -> {
-                    log.warn("Попытка обновления несуществующего комментария: commentId={}", commentId);
-                    return new NotFoundException("Комментарий не найден");
-                });
-
-        if (!comment.getAuthorId().equals(userId)) {
-            log.warn("Пользователь {} пытается обновить чужой комментарий {}", userId, commentId);
+        if (!commentRepository.existsByIdAndAuthorIdAndIsDeletedFalse(commentId, userId)) {
             throw new NotFoundException("Комментарий не найден");
         }
 
+        Comment comment = commentRepository.getReferenceById(commentId);
         if (comment.getIsDeleted()) {
-            log.warn("Попытка обновления удаленного комментария: commentId={}", commentId);
             throw new ConflictException("Не удается обновить удаленный комментарий");
         }
 
@@ -100,20 +83,13 @@ public class CommentServiceImpl implements CommentService {
     public void deleteComment(Long userId, Long commentId) {
         log.debug("Удаление комментария пользователем: userId={}, commentId={}", userId, commentId);
 
-        Comment comment = commentRepository.findById(commentId)
-                .orElseThrow(() -> {
-                    log.warn("Попытка удаления несуществующего комментария: commentId={}", commentId);
-                    return new NotFoundException("Комментарий не найден");
-                });
-
-        if (!comment.getAuthorId().equals(userId)) {
-            log.warn("Пользователь {} пытается удалить чужой комментарий {}", userId, commentId);
+        if (!commentRepository.existsByIdAndAuthorIdAndIsDeletedFalse(commentId, userId)) {
             throw new NotFoundException("Комментарий не найден");
         }
 
+        Comment comment = commentRepository.getReferenceById(commentId);
         comment.setIsDeleted(true);
         commentRepository.save(comment);
-
         log.info("Комментарий удален пользователем: commentId={}, userId={}", commentId, userId);
     }
 
@@ -122,25 +98,22 @@ public class CommentServiceImpl implements CommentService {
     public void deleteCommentByAdmin(Long commentId) {
         log.debug("Удаление комментария администратором: commentId={}", commentId);
 
-        Comment comment = commentRepository.findById(commentId)
-                .orElseThrow(() -> {
-                    log.warn("Попытка удаления несуществующего комментария администратором: commentId={}", commentId);
-                    return new NotFoundException("Комментарий не найден");
-                });
+        if (!commentRepository.existsByIdAndIsDeletedFalse(commentId)) {
+            throw new NotFoundException("Комментарий не найден");
+        }
 
+        Comment comment = commentRepository.getReferenceById(commentId);
         comment.setIsDeleted(true);
         commentRepository.save(comment);
         log.info("Комментарий удален администратором: commentId={}", commentId);
     }
 
     @Override
-    @Transactional(readOnly = true)
     public List<CommentDto> getCommentsByEvent(Long eventId, Pageable pageable) {
         log.debug("Получение комментариев для события: eventId={}", eventId);
 
         Boolean eventExists = eventClient.existsEventById(eventId);
         if (eventExists == null || !eventExists) {
-            log.warn("Попытка получения комментариев для несуществующего события: eventId={}", eventId);
             throw new NotFoundException("Событие не найдено");
         }
 
@@ -151,21 +124,20 @@ public class CommentServiceImpl implements CommentService {
     }
 
     @Override
-    @Transactional(readOnly = true)
     public List<CommentDto> getCommentsByUser(Long userId, Pageable pageable) {
         log.debug("Получение комментариев пользователя: userId={}", userId);
 
         Boolean userExists = userClient.existsUserById(userId);
         if (userExists == null || !userExists) {
-            log.warn("Попытка получения комментариев несуществующего пользователя: userId={}", userId);
             throw new NotFoundException("Пользователь не найден");
         }
+
+        UserShortDto author = userClient.getUserShortById(userId);
 
         return commentRepository.findByAuthorIdAndIsDeletedFalse(userId, pageable)
                 .stream()
                 .map(comment -> {
                     CommentDto dto = commentMapper.toDto(comment);
-                    UserShortDto author = userClient.getUserShortById(userId);
                     dto.setAuthor(author);
                     return dto;
                 })
@@ -173,21 +145,16 @@ public class CommentServiceImpl implements CommentService {
     }
 
     @Override
-    @Transactional(readOnly = true)
     public CommentDto getCommentById(Long commentId) {
         log.debug("Получение комментария по ID: commentId={}", commentId);
 
         Comment comment = commentRepository.findByIdAndIsDeletedFalse(commentId)
-                .orElseThrow(() -> {
-                    log.warn("Попытка получения несуществующего комментария: commentId={}", commentId);
-                    return new NotFoundException("Комментарий не найден");
-                });
+                .orElseThrow(() -> new NotFoundException("Комментарий не найден"));
 
         CommentDto dto = commentMapper.toDto(comment);
         UserShortDto author = userClient.getUserShortById(comment.getAuthorId());
         dto.setAuthor(author);
 
-        log.debug("Комментарий найден: commentId={}", commentId);
         return dto;
     }
 

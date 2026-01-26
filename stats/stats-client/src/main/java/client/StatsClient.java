@@ -90,6 +90,16 @@ public class StatsClient {
         }
     }
 
+    public void hit(String path, String ip) {
+        EndpointHitDto endpointHitDto = new EndpointHitDto(
+                properties.getAppName(),
+                path,
+                ip,
+                LocalDateTime.now()
+        );
+        hit(endpointHitDto);
+    }
+
     public List<ViewStatsDto> getStats(LocalDateTime start, LocalDateTime end,
                                        List<String> uris, Boolean unique) {
         try {

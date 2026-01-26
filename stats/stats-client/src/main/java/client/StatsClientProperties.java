@@ -10,4 +10,5 @@ import org.springframework.stereotype.Component;
 public class StatsClientProperties {
     private String serviceId = "stats-server";
     private String endpointPath = "";
+    private String appName = "ewm-main-service";
 }

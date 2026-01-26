@@ -15,7 +15,7 @@ import java.util.stream.Collectors;
 @RestController
 @RequestMapping("/events/feign")
 @RequiredArgsConstructor
-public class EventFeignController {
+public class EventInternalController {
     private final EventService eventService;
     private final EventMapper eventMapper;
 

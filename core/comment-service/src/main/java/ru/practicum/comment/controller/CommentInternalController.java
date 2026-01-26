@@ -10,7 +10,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/comments/feign")
 @RequiredArgsConstructor
-public class CommentFeignController {
+public class CommentInternalController {
     private final CommentService commentService;
 
     @GetMapping("/events/{eventId}/exists")
