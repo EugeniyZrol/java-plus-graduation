@@ -1,0 +1,107 @@
+server:
+  port: 8082
+
+spring:
+  application:
+    name: event-service
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/main
+    username: user
+    password: password
+
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    properties:
+      hibernate:
+        default_schema: eventservice
+
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:schema.sql
+
+  jackson:
+    time-zone: UTC
+
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        sliding-window-size: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 3
+        automatic-transition-from-open-to-half-open-enabled: true
+        record-exceptions:
+          - org.springframework.web.client.HttpServerErrorException
+          - java.io.IOException
+          - java.util.concurrent.TimeoutException
+          - org.springframework.cloud.client.circuitbreaker.NoFallbackAvailableException
+        ignore-exceptions:
+          - ru.practicum.interaction.exception.NotFoundException
+          - ru.practicum.interaction.exception.ConflictException
+
+    instances:
+      userServiceCircuitBreaker:
+        base-config: default
+        register-health-indicator: true
+      requestServiceCircuitBreaker:
+        base-config: default
+        register-health-indicator: true
+
+  retry:
+    configs:
+      default:
+        max-attempts: 3
+        wait-duration: 1s
+        retry-exceptions:
+          - org.springframework.web.client.HttpServerErrorException
+          - java.io.IOException
+          - java.util.concurrent.TimeoutException
+
+    instances:
+      userServiceRetry:
+        base-config: default
+      requestServiceRetry:
+        base-config: default
+
+feign:
+  circuitbreaker:
+    enabled: true
+  client:
+    config:
+      default:
+        connect-timeout: 5000
+        read-timeout: 5000
+        logger-level: basic
+  httpclient:
+    enabled: true
+    max-connections: 200
+    time-to-live: 900000
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "env,configprops,health"
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+    fetch-registry: true
+    register-with-eureka: true
+  instance:
+    hostname: localhost
+    prefer-ip-address: true
+    instance-id: ${spring.application.name}:${spring.application.instance_id:${random.value}}
+
+logging:
+  level:
+    ru.practicum: DEBUG
+    feign: DEBUG
+    org.springframework.cloud.openfeign: DEBUG
+    okhttp3: DEBUG
+    org.apache.http.wire: DEBUG

@@ -2,6 +2,8 @@ server:
   port: 8080
 
 spring:
+  main:
+    web-application-type: reactive
   application:
     name: gateway-server
 
@@ -12,170 +14,208 @@ spring:
           enabled: false
 
       routes:
-        - id: public_events_route
-          uri: lb://main-service
+        # ======================= ФЕЙН-ЗАПРОСЫ =======================
+        - id: feign_event_route
+          uri: lb://event-service
           predicates:
-            - Path=/events/**
-          filters:
-            - RewritePath=/events/(?<segment>.*), /events/$\{segment}
-            - name: Retry
-              args:
-                retries: 3
-                statuses: INTERNAL_SERVER_ERROR, BAD_GATEWAY, SERVICE_UNAVAILABLE, GATEWAY_TIMEOUT
-                methods: GET
-                backoff:
-                  firstBackoff: 100ms
-                  maxBackoff: 1s
-                  factor: 2
+            - Path=/events/feign/**
 
-        - id: public_categories_route
-          uri: lb://main-service
+        - id: feign_request_route
+          uri: lb://request-service
           predicates:
-            - Path=/categories/**
-          filters:
-            - RewritePath=/categories/(?<segment>.*), /categories/$\{segment}
+            - Path=/requests/feign/**
 
-        - id: public_compilations_route
-          uri: lb://main-service
+        - id: feign_user_route
+          uri: lb://user-service
           predicates:
-            - Path=/compilations/**
-          filters:
-            - RewritePath=/compilations/(?<segment>.*), /compilations/$\{segment}
+            - Path=/users/feign/**
 
-        - id: public_comments_route
-          uri: lb://main-service
+        - id: feign_comment_route
+          uri: lb://comment-service
           predicates:
-            - Path=/comments/**
-          filters:
-            - RewritePath=/comments/(?<segment>.*), /comments/$\{segment}
+            - Path=/comments/feign/**
 
-        - id: private_events_route
-          uri: lb://main-service
+        # ======================= КОММЕНТАРИИ =======================
+        - id: private_user_event_comments_route
+          uri: lb://comment-service
           predicates:
-            - Path=/users/{userId}/events/**
-          filters:
-            - RewritePath=/users/(?<userId>\d+)/events/(?<segment>.*), /users/$\{userId}/events/$\{segment}
-            - name: Retry
-              args:
-                retries: 3
-                statuses: INTERNAL_SERVER_ERROR, BAD_GATEWAY, SERVICE_UNAVAILABLE, GATEWAY_TIMEOUT
-                methods: GET,POST,PATCH
-                backoff:
-                  firstBackoff: 100ms
-                  maxBackoff: 1s
-                  factor: 2
+            - Path=/users/{userId}/comments/event/{eventId}
+            - Method=POST
 
-        - id: private_requests_route
-          uri: lb://main-service
+        - id: private_user_comments_with_id_route
+          uri: lb://comment-service
           predicates:
-            - Path=/users/{userId}/requests/**
-          filters:
-            - RewritePath=/users/(?<userId>\d+)/requests/(?<segment>.*), /users/$\{userId}/requests/$\{segment}
+            - Path=/users/{userId}/comments/{commentId}
+            - Method=GET,PATCH,DELETE
 
-        - id: private_comments_route
-          uri: lb://main-service
+        - id: private_user_comments_route
+          uri: lb://comment-service
           predicates:
-            - Path=/users/{userId}/comments/**
-          filters:
-            - RewritePath=/users/(?<userId>\d+)/comments/(?<segment>.*), /users/$\{userId}/comments/$\{segment}
+            - Path=/users/{userId}/comments
+            - Method=GET
 
+        - id: public_comments_event_route
+          uri: lb://comment-service
+          predicates:
+            - Path=/comments/event/{eventId}
+            - Method=GET
+
+        - id: public_comments_id_route
+          uri: lb://comment-service
+          predicates:
+            - Path=/comments/{commentId}
+            - Method=GET
+
+        # ======================= АДМИН USERS =======================
         - id: admin_users_route
-          uri: lb://main-service
+          uri: lb://user-service
           predicates:
             - Path=/admin/users/**
-          filters:
-            - RewritePath=/admin/users/(?<segment>.*), /admin/users/$\{segment}
-            - name: Retry
-              args:
-                retries: 3
-                statuses: INTERNAL_SERVER_ERROR, BAD_GATEWAY, SERVICE_UNAVAILABLE, GATEWAY_TIMEOUT
-                methods: GET,POST,DELETE
-                backoff:
-                  firstBackoff: 100ms
-                  maxBackoff: 1s
-                  factor: 2
 
+        # ======================= АДМИН CATEGORIES =======================
         - id: admin_categories_route
-          uri: lb://main-service
+          uri: lb://event-service
           predicates:
             - Path=/admin/categories/**
-          filters:
-            - RewritePath=/admin/categories/(?<segment>.*), /admin/categories/$\{segment}
-            - name: CircuitBreaker
-              args:
-                name: adminCategoriesCircuitBreaker
 
+        - id: admin_categories_id_route
+          uri: lb://event-service
+          predicates:
+            - Path=/admin/categories/{catId}
+            - Method=DELETE,PATCH
+
+        # ======================= АДМИН EVENTS =======================
         - id: admin_events_route
-          uri: lb://main-service
+          uri: lb://event-service
           predicates:
             - Path=/admin/events/**
-          filters:
-            - RewritePath=/admin/events/(?<segment>.*), /admin/events/$\{segment}
-            - name: CircuitBreaker
-              args:
-                name: adminEventsCircuitBreaker
 
+        - id: admin_events_search_route
+          uri: lb://event-service
+          predicates:
+            - Path=/admin/events
+            - Method=GET
+
+        - id: admin_events_id_route
+          uri: lb://event-service
+          predicates:
+            - Path=/admin/events/{eventId}
+            - Method=GET,PATCH
+
+        - id: admin_events_publish_route
+          uri: lb://event-service
+          predicates:
+            - Path=/admin/events/{eventId}/publish
+            - Method=PATCH
+
+        - id: admin_events_reject_route
+          uri: lb://event-service
+          predicates:
+            - Path=/admin/events/{eventId}/reject
+            - Method=PATCH
+
+        # ======================= АДМИН COMPILATIONS =======================
         - id: admin_compilations_route
-          uri: lb://main-service
+          uri: lb://event-service
           predicates:
             - Path=/admin/compilations/**
-          filters:
-            - RewritePath=/admin/compilations/(?<segment>.*), /admin/compilations/$\{segment}
 
+        - id: admin_compilations_id_route
+          uri: lb://event-service
+          predicates:
+            - Path=/admin/compilations/{compId}
+            - Method=DELETE,PATCH
+
+        # ======================= АДМИН COMMENTS =======================
         - id: admin_comments_route
-          uri: lb://main-service
+          uri: lb://comment-service
           predicates:
             - Path=/admin/comments/**
-          filters:
-            - RewritePath=/admin/comments/(?<segment>.*), /admin/comments/$\{segment}
 
+        # ======================= ПРИВАТНЫЕ USERS EVENTS =======================
+        - id: private_user_events_route
+          uri: lb://event-service
+          predicates:
+            - Path=/users/{userId}/events
+            - Method=GET,POST
+
+        - id: private_user_events_id_route
+          uri: lb://event-service
+          predicates:
+            - Path=/users/{userId}/events/{eventId}
+            - Method=GET,PATCH
+
+        # ======================= ПРИВАТНЫЕ USERS REQUESTS =======================
+        - id: private_user_requests_route
+          uri: lb://request-service
+          predicates:
+            - Path=/users/{userId}/requests
+            - Method=GET,POST
+
+        - id: private_user_requests_cancel_route
+          uri: lb://request-service
+          predicates:
+            - Path=/users/{userId}/requests/{requestId}/cancel
+            - Method=PATCH
+
+        # ======================= ПРИВАТНЫЕ EVENT REQUESTS =======================
+        - id: private_event_requests_route
+          uri: lb://request-service
+          predicates:
+            - Path=/users/{userId}/events/{eventId}/requests
+            - Method=GET,PATCH
+
+        # ======================= ПУБЛИЧНЫЕ CATEGORIES =======================
+        - id: public_categories_route
+          uri: lb://event-service
+          predicates:
+            - Path=/categories
+            - Method=GET
+
+        - id: public_categories_id_route
+          uri: lb://event-service
+          predicates:
+            - Path=/categories/{catId}
+            - Method=GET
+
+        # ======================= ПУБЛИЧНЫЕ COMPILATIONS =======================
+        - id: public_compilations_route
+          uri: lb://event-service
+          predicates:
+            - Path=/compilations
+            - Method=GET
+
+        - id: public_compilations_id_route
+          uri: lb://event-service
+          predicates:
+            - Path=/compilations/{compId}
+            - Method=GET
+
+        # ======================= ПУБЛИЧНЫЕ EVENTS =======================
+        - id: public_events_route
+          uri: lb://event-service
+          predicates:
+            - Path=/events
+            - Method=GET
+
+        - id: public_events_id_route
+          uri: lb://event-service
+          predicates:
+            - Path=/events/{eventId}
+            - Method=GET
+
+        # ======================= СТАТИСТИКА =======================
         - id: stats_hit_route
-          uri: lb://stats-service
+          uri: lb://stats-server
           predicates:
             - Path=/hit
             - Method=POST
-          filters:
-            - RewritePath=/hit, /hit
-            - name: Retry
-              args:
-                retries: 3
-                statuses: INTERNAL_SERVER_ERROR, BAD_GATEWAY, SERVICE_UNAVAILABLE, GATEWAY_TIMEOUT
-                methods: POST
-                backoff:
-                  firstBackoff: 100ms
-                  maxBackoff: 1s
-                  factor: 2
 
         - id: stats_get_route
-          uri: lb://stats-service
+          uri: lb://stats-server
           predicates:
             - Path=/stats
             - Method=GET
-          filters:
-            - RewritePath=/stats, /stats
-            - name: Retry
-              args:
-                retries: 3
-                statuses: INTERNAL_SERVER_ERROR, BAD_GATEWAY, SERVICE_UNAVAILABLE, GATEWAY_TIMEOUT
-                methods: GET
-                backoff:
-                  firstBackoff: 100ms
-                  maxBackoff: 1s
-                  factor: 2
-
-resilience4j:
-  circuitbreaker:
-    instances:
-      adminCategoriesCircuitBreaker:
-        slidingWindowSize: 10
-        minimumNumberOfCalls: 5
-        failureRateThreshold: 50
-        waitDurationInOpenState: 5s
-      adminEventsCircuitBreaker:
-        slidingWindowSize: 10
-        minimumNumberOfCalls: 5
-        failureRateThreshold: 50
-        waitDurationInOpenState: 5s
 
 eureka:
   client:
@@ -183,27 +223,12 @@ eureka:
       defaultZone: ${EUREKA_SERVER_URL:http://localhost:8761/eureka/}
     fetch-registry: true
     register-with-eureka: true
-    registry-fetch-interval-seconds: 5
-  instance:
-    hostname: ${HOSTNAME:localhost}
-    prefer-ip-address: true
-    lease-renewal-interval-in-seconds: 5
-    lease-expiration-duration-in-seconds: 10
-
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health,info,metrics,gateway
-      base-path: /actuator
-  endpoint:
-    health:
-      show-details: always
-    gateway:
-      enabled: true
 
 logging:
   level:
-    org.springframework.cloud.gateway: INFO
-    reactor.netty.http.client: INFO
-    ru.practicum.gatewayserver: DEBUG
+    root: INFO
+    org.springframework.cloud.gateway: TRACE
+    org.springframework.cloud.gateway.route.RouteDefinitionRouteLocator: TRACE
+    org.springframework.cloud.gateway.handler.FilteringWebHandler: TRACE
+    reactor.netty.http.client: DEBUG
+    reactor.netty.http.server: DEBUG

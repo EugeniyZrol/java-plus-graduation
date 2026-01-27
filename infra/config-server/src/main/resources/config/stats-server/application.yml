@@ -6,7 +6,7 @@ spring:
     name: stats-server
 
   datasource:
-    url: jdbc:postgresql://localhost:6541/stats
+    url: jdbc:postgresql://localhost:5432/stats
     username: user
     password: password
     driver-class-name: org.postgresql.Driver

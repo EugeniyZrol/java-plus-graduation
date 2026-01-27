@@ -1,0 +1,15 @@
+spring:
+  application:
+    name: event-service
+  config:
+    import: "optional:configserver:"
+  cloud:
+    config:
+      discovery:
+        enabled: true
+        service-id: config-server
+      fail-fast: false
+stats:
+  service:
+    name: ${STATS_SERVICE_NAME:stats-server}
+    endpoint: ${STATS_SERVICE_ENDPOINT:}
