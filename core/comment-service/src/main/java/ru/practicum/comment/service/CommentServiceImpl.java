@@ -60,14 +60,8 @@ public class CommentServiceImpl implements CommentService {
     public CommentDto updateComment(Long userId, Long commentId, UpdateCommentDto updateCommentDto) {
         log.debug("Обновление комментария: userId={}, commentId={}", userId, commentId);
 
-        if (!commentRepository.existsByIdAndAuthorIdAndIsDeletedFalse(commentId, userId)) {
-            throw new NotFoundException("Комментарий не найден");
-        }
-
-        Comment comment = commentRepository.getReferenceById(commentId);
-        if (comment.getIsDeleted()) {
-            throw new ConflictException("Не удается обновить удаленный комментарий");
-        }
+        Comment comment = commentRepository.findByIdAndAuthorIdAndIsDeletedFalseForUpdate(commentId, userId)
+                .orElseThrow(() -> new NotFoundException("Комментарий не найден"));
 
         commentMapper.updateCommentFromDto(updateCommentDto, comment);
         comment.setIsEdited(true);
@@ -83,11 +77,9 @@ public class CommentServiceImpl implements CommentService {
     public void deleteComment(Long userId, Long commentId) {
         log.debug("Удаление комментария пользователем: userId={}, commentId={}", userId, commentId);
 
-        if (!commentRepository.existsByIdAndAuthorIdAndIsDeletedFalse(commentId, userId)) {
-            throw new NotFoundException("Комментарий не найден");
-        }
+        Comment comment = commentRepository.findByIdAndAuthorIdAndIsDeletedFalseForUpdate(commentId, userId)
+                .orElseThrow(() -> new NotFoundException("Комментарий не найден"));
 
-        Comment comment = commentRepository.getReferenceById(commentId);
         comment.setIsDeleted(true);
         commentRepository.save(comment);
         log.info("Комментарий удален пользователем: commentId={}, userId={}", commentId, userId);

@@ -3,6 +3,7 @@ package client;
 import model.EndpointHitDto;
 import model.ViewStatsDto;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.client.ServiceInstance;
 import org.springframework.cloud.client.discovery.DiscoveryClient;
 import org.springframework.core.ParameterizedTypeReference;
@@ -28,14 +29,20 @@ public class StatsClient {
 
     private final DiscoveryClient discoveryClient;
     private final RestClient restClient;
-    private final StatsClientProperties properties;
+    private final String applicationName;
+    private final String statsServiceName;
+    private final String statsServiceEndpoint;
 
     public StatsClient(DiscoveryClient discoveryClient,
                        RestClient.Builder restClientBuilder,
-                       StatsClientProperties properties) {
+                       @Value("${spring.application.name}") String applicationName,
+                       @Value("${stats.service.name:stats-server}") String statsServiceName,
+                       @Value("${stats.service.endpoint:}") String statsServiceEndpoint) {
         this.discoveryClient = discoveryClient;
         this.restClient = restClientBuilder.build();
-        this.properties = properties;
+        this.applicationName = applicationName;
+        this.statsServiceName = statsServiceName;
+        this.statsServiceEndpoint = statsServiceEndpoint;
     }
 
     @Retryable(
@@ -44,10 +51,10 @@ public class StatsClient {
             backoff = @Backoff(delay = 3000)
     )
     private ServiceInstance getStatsServiceInstance() {
-        List<ServiceInstance> instances = discoveryClient.getInstances(properties.getServiceId());
+        List<ServiceInstance> instances = discoveryClient.getInstances(statsServiceName);
         if (instances == null || instances.isEmpty()) {
             throw new StatsServerUnavailableException(
-                    "Сервис статистики не найден в службе обнаружения. Service ID: " + properties.getServiceId()
+                    "Сервис статистики не найден в службе обнаружения. Service ID: " + statsServiceName
             );
         }
         return instances.getFirst();
@@ -56,7 +63,7 @@ public class StatsClient {
     private URI buildStatsUri(String path) {
         ServiceInstance instance = getStatsServiceInstance();
 
-        String fullPath = properties.getEndpointPath() +
+        String fullPath = statsServiceEndpoint +
                 (path.startsWith("/") ? path : "/" + path);
 
         return UriComponentsBuilder.newInstance()
@@ -92,7 +99,7 @@ public class StatsClient {
 
     public void hit(String path, String ip) {
         EndpointHitDto endpointHitDto = new EndpointHitDto(
-                properties.getAppName(),
+                applicationName,
                 path,
                 ip,
                 LocalDateTime.now()
@@ -105,7 +112,7 @@ public class StatsClient {
         try {
             ServiceInstance instance = getStatsServiceInstance();
 
-            String basePath = properties.getEndpointPath() + "/stats";
+            String basePath = statsServiceEndpoint + "/stats";
 
             UriComponentsBuilder builder = UriComponentsBuilder.newInstance()
                     .scheme("http")

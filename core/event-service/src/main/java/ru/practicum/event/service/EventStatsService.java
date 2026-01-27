@@ -14,6 +14,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import ru.practicum.interaction.dto.user.UserShortDto;
 
+import jakarta.servlet.http.HttpServletRequest;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -25,23 +26,31 @@ public class EventStatsService {
     private final StatsClient statsClient;
     private final RequestClient requestClient;
     private final EventRepository eventRepository;
-    private final EventMapper eventMapper; // Маппер внедрен в сервис
+    private final EventMapper eventMapper;
 
     public EventFullDto enrichEventFullDto(Event event, CategoryDto category, UserShortDto initiator) {
         EventFullDto dto = eventMapper.toFullDto(event, category, initiator);
+
         Long confirmedRequests = getConfirmedRequests(event.getId());
         dto.setConfirmedRequests(confirmedRequests);
+
         Long views = getViews(event.getId());
         dto.setViews(views);
+
         return dto;
     }
 
     public List<EventShortDto> enrichEventsShortDtoBatch(List<Event> events,
                                                          Map<Long, CategoryDto> categories,
                                                          Map<Long, UserShortDto> users) {
-        if (events.isEmpty()) return List.of();
+        if (events.isEmpty()) {
+            return Collections.emptyList();
+        }
 
-        List<Long> eventIds = events.stream().map(Event::getId).collect(Collectors.toList());
+        List<Long> eventIds = events.stream()
+                .map(Event::getId)
+                .collect(Collectors.toList());
+
         Map<Long, Long> viewsMap = getViewsForEventsBatch(eventIds);
         Map<Long, Long> requestsMap = getConfirmedRequestsBatch(eventIds);
 
@@ -62,9 +71,14 @@ public class EventStatsService {
     public List<EventFullDto> enrichEventsFullDtoBatch(List<Event> events,
                                                        Map<Long, CategoryDto> categories,
                                                        Map<Long, UserShortDto> users) {
-        if (events.isEmpty()) return List.of();
+        if (events.isEmpty()) {
+            return Collections.emptyList();
+        }
 
-        List<Long> eventIds = events.stream().map(Event::getId).collect(Collectors.toList());
+        List<Long> eventIds = events.stream()
+                .map(Event::getId)
+                .collect(Collectors.toList());
+
         Map<Long, Long> viewsMap = getViewsForEventsBatch(eventIds);
         Map<Long, Long> requestsMap = getConfirmedRequestsBatch(eventIds);
 
@@ -83,65 +97,146 @@ public class EventStatsService {
     }
 
     public Map<Long, Long> getViewsForEventsBatch(List<Long> eventIds) {
-        if (eventIds.isEmpty()) return Map.of();
+        if (eventIds.isEmpty()) {
+            return Collections.emptyMap();
+        }
 
         List<String> uris = eventIds.stream()
                 .map(id -> "/events/" + id)
                 .collect(Collectors.toList());
 
-        Event earliestEvent = eventRepository.findFirstByOrderByCreatedAtAsc();
-        LocalDateTime start = (earliestEvent != null)
-                ? earliestEvent.getCreatedAt()
-                : LocalDateTime.now().minusYears(1);
+        LocalDateTime start = getEarliestEventDate();
         LocalDateTime end = LocalDateTime.now();
 
-        List<ViewStatsDto> stats = statsClient.getStats(start, end, uris, true);
-        Map<Long, Long> viewsMap = eventIds.stream()
-                .collect(Collectors.toMap(id -> id, id -> 0L));
+        log.debug("Запрос статистики просмотров для {} событий с {} по {}",
+                eventIds.size(), start, end);
 
-        if (stats != null) {
-            stats.forEach(stat -> {
-                Long eventId = extractEventIdFromUri(stat.getUri());
-                if (eventId != -1L) viewsMap.put(eventId, stat.getHits());
-            });
-        }
-        return viewsMap;
+        List<ViewStatsDto> stats = statsClient.getStats(start, end, uris, true);
+
+        return createViewsMap(eventIds, stats);
     }
+
+
+//    public void recordEventHit(Long eventId, HttpServletRequest request) {
+//        try {
+//            String path = "/events/" + eventId;
+//            String ip = getClientIp(request);
+//
+//            log.debug("Запись hit для события {} с IP: {}", eventId, ip);
+//            statsClient.hit(path, ip);
+//
+//        } catch (Exception e) {
+//            log.error("Ошибка при записи статистики для события {}: {}", eventId, e.getMessage(), e);
+//        }
+//    }
+
 
     public void recordHit(String path, String ip) {
-        statsClient.hit(path, ip);
+        try {
+            log.debug("Запись hit для пути {} с IP: {}", path, ip);
+            statsClient.hit(path, ip);
+        } catch (Exception e) {
+            log.error("Ошибка при записи статистики для пути {}: {}", path, e.getMessage(), e);
+        }
     }
+
 
     public Map<Long, Long> getConfirmedRequestsBatch(List<Long> eventIds) {
-        if (eventIds.isEmpty()) return Map.of();
-
-        Map<Long, Integer> result = requestClient.getConfirmedRequestsCountBatch(eventIds);
-        Map<Long, Long> confirmedRequestsMap = new HashMap<>();
-        eventIds.forEach(id -> confirmedRequestsMap.put(id, 0L));
-
-        if (result != null && !result.isEmpty()) {
-            result.forEach((key, value) -> confirmedRequestsMap.put(key, value.longValue()));
+        if (eventIds.isEmpty()) {
+            return Collections.emptyMap();
         }
-        log.debug("Получены подтвержденные запросы для {} событий", eventIds.size());
-        return confirmedRequestsMap;
+
+        try {
+            Map<Long, Integer> result = requestClient.getConfirmedRequestsCountBatch(eventIds);
+
+            Map<Long, Long> confirmedRequestsMap = new HashMap<>();
+            eventIds.forEach(id -> confirmedRequestsMap.put(id, 0L));
+
+            if (result != null && !result.isEmpty()) {
+                result.forEach((eventId, count) ->
+                        confirmedRequestsMap.put(eventId, count.longValue())
+                );
+            }
+
+            log.debug("Получены подтвержденные запросы для {} событий", eventIds.size());
+            return confirmedRequestsMap;
+
+        } catch (Exception e) {
+            log.error("Ошибка при получении подтвержденных запросов: {}", e.getMessage(), e);
+            return eventIds.stream()
+                    .collect(Collectors.toMap(id -> id, id -> 0L));
+        }
     }
 
+
     public Long getConfirmedRequests(Long eventId) {
-        Map<Long, Long> requestsMap = getConfirmedRequestsBatch(List.of(eventId));
+        Map<Long, Long> requestsMap = getConfirmedRequestsBatch(Collections.singletonList(eventId));
         return requestsMap.getOrDefault(eventId, 0L);
     }
 
+
     public Long getViews(Long eventId) {
-        Map<Long, Long> viewsMap = getViewsForEventsBatch(List.of(eventId));
+        Map<Long, Long> viewsMap = getViewsForEventsBatch(Collections.singletonList(eventId));
         return viewsMap.getOrDefault(eventId, 0L);
     }
+
+
+    private Map<Long, Long> createViewsMap(List<Long> eventIds, List<ViewStatsDto> stats) {
+        Map<Long, Long> viewsMap = eventIds.stream()
+                .collect(Collectors.toMap(id -> id, id -> 0L));
+
+        if (stats != null && !stats.isEmpty()) {
+            stats.forEach(stat -> {
+                Long eventId = extractEventIdFromUri(stat.getUri());
+                if (eventId != -1L) {
+                    viewsMap.put(eventId, stat.getHits());
+                }
+            });
+        }
+
+        return viewsMap;
+    }
+
+//    private String getClientIp(HttpServletRequest request) {
+//        String ip = request.getHeader("X-Forwarded-For");
+//        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
+//            ip = request.getHeader("Proxy-Client-IP");
+//        }
+//        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
+//            ip = request.getHeader("WL-Proxy-Client-IP");
+//        }
+//        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
+//            ip = request.getRemoteAddr();
+//        }
+//
+//        // Если IP содержит несколько адресов (цепочка прокси), берем первый
+//        if (ip != null && ip.contains(",")) {
+//            ip = ip.split(",")[0].trim();
+//        }
+//
+//        return ip;
+//    }
 
     private Long extractEventIdFromUri(String uri) {
         try {
             String[] parts = uri.split("/");
-            return Long.parseLong(parts[parts.length - 1]);
+            String lastPart = parts[parts.length - 1];
+            return Long.parseLong(lastPart);
         } catch (Exception e) {
+            log.warn("Не удалось извлечь ID события из URI: {}", uri);
             return -1L;
+        }
+    }
+
+    private LocalDateTime getEarliestEventDate() {
+        try {
+            Event earliestEvent = eventRepository.findFirstByOrderByCreatedAtAsc();
+            return (earliestEvent != null)
+                    ? earliestEvent.getCreatedAt()
+                    : LocalDateTime.now().minusYears(1);
+        } catch (Exception e) {
+            log.warn("Не удалось получить дату самого раннего события: {}", e.getMessage());
+            return LocalDateTime.now().minusYears(1);
         }
     }
 }

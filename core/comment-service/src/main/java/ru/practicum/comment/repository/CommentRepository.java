@@ -47,4 +47,8 @@ public interface CommentRepository extends JpaRepository<Comment, Long> {
     @Query("SELECT COUNT(c) > 0 FROM Comment c " +
             "WHERE c.id = :id AND c.authorId = :authorId AND c.isDeleted = false")
     Boolean existsByIdAndAuthorIdAndIsDeletedFalse(@Param("id") Long id, @Param("authorId") Long authorId);
+
+    @Query("SELECT c FROM Comment c " +
+            "WHERE c.id = :id AND c.authorId = :authorId AND c.isDeleted = false")
+    Optional<Comment> findByIdAndAuthorIdAndIsDeletedFalseForUpdate(@Param("id") Long id, @Param("authorId") Long authorId);
 }

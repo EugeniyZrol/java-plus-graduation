@@ -9,3 +9,7 @@ spring:
         enabled: true
         service-id: config-server
       fail-fast: false
+stats:
+  service:
+    name: ${STATS_SERVICE_NAME:stats-server}
+    endpoint: ${STATS_SERVICE_ENDPOINT:}
