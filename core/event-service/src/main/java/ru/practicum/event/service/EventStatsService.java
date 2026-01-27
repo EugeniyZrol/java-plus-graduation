@@ -14,7 +14,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import ru.practicum.interaction.dto.user.UserShortDto;
 
-import jakarta.servlet.http.HttpServletRequest;
 import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -116,21 +115,6 @@ public class EventStatsService {
         return createViewsMap(eventIds, stats);
     }
 
-
-//    public void recordEventHit(Long eventId, HttpServletRequest request) {
-//        try {
-//            String path = "/events/" + eventId;
-//            String ip = getClientIp(request);
-//
-//            log.debug("Запись hit для события {} с IP: {}", eventId, ip);
-//            statsClient.hit(path, ip);
-//
-//        } catch (Exception e) {
-//            log.error("Ошибка при записи статистики для события {}: {}", eventId, e.getMessage(), e);
-//        }
-//    }
-
-
     public void recordHit(String path, String ip) {
         try {
             log.debug("Запись hit для пути {} с IP: {}", path, ip);
@@ -196,26 +180,6 @@ public class EventStatsService {
 
         return viewsMap;
     }
-
-//    private String getClientIp(HttpServletRequest request) {
-//        String ip = request.getHeader("X-Forwarded-For");
-//        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
-//            ip = request.getHeader("Proxy-Client-IP");
-//        }
-//        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
-//            ip = request.getHeader("WL-Proxy-Client-IP");
-//        }
-//        if (ip == null || ip.isEmpty() || "unknown".equalsIgnoreCase(ip)) {
-//            ip = request.getRemoteAddr();
-//        }
-//
-//        // Если IP содержит несколько адресов (цепочка прокси), берем первый
-//        if (ip != null && ip.contains(",")) {
-//            ip = ip.split(",")[0].trim();
-//        }
-//
-//        return ip;
-//    }
 
     private Long extractEventIdFromUri(String uri) {
         try {
