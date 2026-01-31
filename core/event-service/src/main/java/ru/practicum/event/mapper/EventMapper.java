@@ -30,14 +30,14 @@ public interface EventMapper {
     @Mapping(target = "initiator", source = "initiator")
     @Mapping(target = "confirmedRequests", ignore = true)
     @Mapping(target = "paid", source = "event.isPaid")
-    @Mapping(target = "views", ignore = true)
+    @Mapping(target = "rating", ignore = true)
     EventShortDto toShortDto(Event event, CategoryDto category, UserShortDto initiator);
 
     @Mapping(target = "id", source = "event.id")
     @Mapping(target = "category", source = "category")
     @Mapping(target = "initiator", source = "initiator")
     @Mapping(target = "confirmedRequests", ignore = true)
-    @Mapping(target = "views", ignore = true)
+    @Mapping(target = "rating", ignore = true)
     @Mapping(target = "paid", source = "event.isPaid")
     @Mapping(target = "requestModeration", source = "event.isRequestModeration")
     @Mapping(target = "createdOn", source = "event.createdAt")
@@ -66,7 +66,7 @@ public interface EventMapper {
     @Mapping(target = "category", ignore = true)
     @Mapping(target = "initiator", ignore = true)
     @Mapping(target = "confirmedRequests", ignore = true)
-    @Mapping(target = "views", ignore = true)
+    @Mapping(target = "rating", ignore = true)
     @Mapping(target = "paid", source = "isPaid")
     EventShortDto toShortDtoWithoutRelations(Event event);
 

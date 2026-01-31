@@ -9,11 +9,11 @@ import org.springframework.context.annotation.ComponentScan;
 import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 
 @SpringBootApplication
-@ComponentScan(basePackages = {"ru.practicum", "client"})
+@ComponentScan(basePackages = {"ru.practicum", "ru/practicum/ewm/stats/client"})
 @EntityScan(basePackages = {"ru.practicum"})
 @EnableJpaRepositories(basePackages = {"ru.practicum"})
 @EnableDiscoveryClient
-@EnableFeignClients(basePackages = {"ru.practicum.interaction.client", "ru.practicum.event.client", "client"})
+@EnableFeignClients(basePackages = {"ru.practicum.interaction.client", "ru.practicum.event.client", "ru/practicum/ewm/stats/client"})
 public class EventServiceApplication {
     public static void main(String[] args) {
         SpringApplication.run(EventServiceApplication.class, args);

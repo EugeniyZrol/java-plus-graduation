@@ -60,7 +60,7 @@ public class EventInternalController {
 
         EventFullDto dto = eventMapper.toFullDto(event, category, initiator);
         dto.setConfirmedRequests(0L);
-        dto.setViews(0L);
+        dto.setRating(0.0);;
         return dto;
     }
 

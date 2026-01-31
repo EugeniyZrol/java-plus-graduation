@@ -8,7 +8,6 @@
         <artifactId>explore-with-me</artifactId>
         <groupId>ru.practicum</groupId>
         <version>0.0.1-SNAPSHOT</version>
-        <!-- ИСПРАВЛЕНО: правильный путь -->
         <relativePath>../pom.xml</relativePath>
     </parent>
 
@@ -17,9 +16,25 @@
     <name>stats</name>
     <description>Stats module for Explore With Me</description>
 
+    <repositories>
+        <repository>
+            <id>central</id>
+            <url>https://repo.maven.apache.org/maven2</url>
+        </repository>
+        <repository>
+            <id>confluent</id>
+            <url>https://packages.confluent.io/maven/</url>
+        </repository>
+    </repositories>
+
     <modules>
         <module>stats-dto</module>
         <module>stats-server</module>
         <module>stats-client</module>
+        <module>stats-avro</module>
+        <module>stats-proto</module>
+        <module>collector</module>
+        <module>aggregator</module>
+        <module>analyzer</module>
     </modules>
 </project>

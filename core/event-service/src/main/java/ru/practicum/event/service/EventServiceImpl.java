@@ -2,6 +2,9 @@ package ru.practicum.event.service;
 
 import ru.practicum.categories.service.CategoryService;
 import ru.practicum.event.repository.specification.EventSpecifications;
+import ru.practicum.ewm.stats.client.AnalyzerGrpcClient;
+import ru.practicum.ewm.stats.client.CollectorGrpcClient;
+import ru.practicum.ewm.stats.model.RecommendedEvent;
 import ru.practicum.interaction.client.feign.UserClient;
 import ru.practicum.interaction.dto.categories.CategoryDto;
 import ru.practicum.interaction.dto.event.*;
@@ -11,6 +14,7 @@ import ru.practicum.event.model.Event;
 import ru.practicum.interaction.enums.event.EventState;
 import ru.practicum.interaction.enums.event.StateAction;
 import ru.practicum.event.repository.EventRepository;
+import ru.practicum.interaction.exception.ConflictException;
 import ru.practicum.interaction.validation.EventValidationUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -35,6 +39,8 @@ public class EventServiceImpl implements EventService {
     private final EventStatsService eventStatsService;
     private final UserClient userClient;
     private final CategoryService categoryService;
+    private final CollectorGrpcClient collectorGrpcClient;
+    private final AnalyzerGrpcClient analyzerGrpcClient;
 
     @Override
     public List<EventShortDto> getEvents(Long userId, Pageable pageable) {
@@ -64,7 +70,7 @@ public class EventServiceImpl implements EventService {
         Event event = eventRepository.findByIdAndInitiatorId(eventId, userId)
                 .orElseThrow(() -> new NotFoundException("Event not found"));
 
-        eventStatsService.recordHit("/events/" + eventId, ip);
+        collectorGrpcClient.sendView(userId, eventId);
 
         CategoryDto category = categoryService.getCategoryById(event.getCategoryId());
         UserShortDto initiator = userClient.getUserShortById(event.getInitiatorId());
@@ -96,7 +102,7 @@ public class EventServiceImpl implements EventService {
         UserShortDto initiator = userClient.getUserShortById(savedEvent.getInitiatorId());
         EventFullDto eventDto = eventMapper.toFullDto(savedEvent, category, initiator);
         eventDto.setConfirmedRequests(0L);
-        eventDto.setViews(0L);
+        eventDto.setRating(0.0);
         return eventDto;
     }
 
@@ -161,17 +167,16 @@ public class EventServiceImpl implements EventService {
                 events.stream().map(Event::getInitiatorId).collect(Collectors.toSet())
         );
 
-        eventStatsService.recordHit("/events", ip);
         return eventStatsService.enrichEventsShortDtoBatch(events, categories, users);
     }
 
     @Override
-    public EventFullDto getPublicEventById(Long eventId, String ip) {
+    public EventFullDto getPublicEventById(Long eventId, Long userId, String ip) {
         Event event = eventRepository.findById(eventId)
                 .filter(e -> EventState.PUBLISHED.equals(e.getState()))
                 .orElseThrow(() -> new NotFoundException("Event not found"));
 
-        eventStatsService.recordHit("/events/" + eventId, ip);
+        collectorGrpcClient.sendView(userId, eventId);
 
         CategoryDto category = categoryService.getCategoryById(event.getCategoryId());
         UserShortDto initiator = userClient.getUserShortById(event.getInitiatorId());
@@ -262,5 +267,65 @@ public class EventServiceImpl implements EventService {
     public Event getEventByIdForFeign(Long eventId) {
         return eventRepository.findById(eventId)
                 .orElseThrow(() -> new NotFoundException("Event not found with id: " + eventId));
+    }
+
+    @Override
+    public List<EventShortDto> getRecommendations(Long userId, int size) {
+        if (Boolean.FALSE.equals(userClient.existsUserById(userId))) {
+            throw new NotFoundException("User not found with id: " + userId);
+        }
+
+        List<RecommendedEvent> recommendedEvents =
+                analyzerGrpcClient.getRecommendationsForUser(userId, size);
+
+        if (recommendedEvents.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        Set<Long> eventIds = recommendedEvents.stream()
+                .map(RecommendedEvent::getEventId)
+                .collect(Collectors.toSet());
+
+        Set<Event> events = getEventsByIds(eventIds);
+
+        Map<Long, Double> scoreMap = recommendedEvents.stream()
+                .collect(Collectors.toMap(RecommendedEvent::getEventId, RecommendedEvent::getScore));
+
+        Map<Long, CategoryDto> categories = categoryService.getCategoriesByIds(
+                events.stream().map(Event::getCategoryId).collect(Collectors.toSet())
+        );
+        Map<Long, UserShortDto> users = userClient.getUsersShortByIds(
+                events.stream().map(Event::getInitiatorId).collect(Collectors.toSet())
+        );
+
+        Map<Long, Long> confirmedRequestsMap = eventStatsService.getConfirmedRequestsBatch(
+                new ArrayList<>(eventIds)
+        );
+
+        return events.stream()
+                .filter(event -> EventState.PUBLISHED.equals(event.getState()))
+                .sorted(Comparator.comparingDouble(event ->
+                        -scoreMap.getOrDefault(event.getId(), 0.0)))
+                .limit(size)
+                .map(event -> {
+                    EventShortDto dto = eventMapper.toShortDto(
+                            event,
+                            categories.get(event.getCategoryId()),
+                            users.get(event.getInitiatorId())
+                    );
+                    dto.setRating(scoreMap.getOrDefault(event.getId(), 0.0));
+                    dto.setConfirmedRequests(confirmedRequestsMap.getOrDefault(event.getId(), 0L));
+                    return dto;
+                })
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public void likeEvent(Long userId, Long eventId) {
+        Double rating = analyzerGrpcClient.getEventRating(eventId);
+        if (rating == null || rating <= 0.0) {
+            throw new ConflictException("Пользователь не посещал это мероприятие");
+        }
+        collectorGrpcClient.sendLike(userId, eventId);
     }
 }

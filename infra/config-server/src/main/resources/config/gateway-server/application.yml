@@ -217,18 +217,21 @@ spring:
             - Path=/stats
             - Method=GET
 
+        - id: events_recommendations_route
+          uri: lb://event-service
+          predicates:
+            - Path=/events/recommendations
+            - Method=GET
+
+        - id: events_like_route
+          uri: lb://event-service
+          predicates:
+            - Path=/events/{eventId}/like
+            - Method=PUT
+
 eureka:
   client:
     service-url:
       defaultZone: ${EUREKA_SERVER_URL:http://localhost:8761/eureka/}
     fetch-registry: true
     register-with-eureka: true
-
-logging:
-  level:
-    root: INFO
-    org.springframework.cloud.gateway: TRACE
-    org.springframework.cloud.gateway.route.RouteDefinitionRouteLocator: TRACE
-    org.springframework.cloud.gateway.handler.FilteringWebHandler: TRACE
-    reactor.netty.http.client: DEBUG
-    reactor.netty.http.server: DEBUG

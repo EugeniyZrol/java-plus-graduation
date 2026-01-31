@@ -6,15 +6,21 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+import ru.practicum.event.model.Event;
+import ru.practicum.ewm.stats.client.AnalyzerGrpcClient;
+import ru.practicum.ewm.stats.model.RecommendedEvent;
 import ru.practicum.interaction.dto.event.EventFullDto;
 import ru.practicum.interaction.dto.event.EventShortDto;
 import ru.practicum.interaction.dto.event.PublicEventSearchRequest;
 import ru.practicum.event.service.EventService;
+import ru.practicum.interaction.enums.event.EventState;
 
 import java.time.LocalDateTime;
-import java.util.List;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/events")
@@ -22,6 +28,7 @@ import java.util.List;
 @Validated
 public class PublicEventController {
     private final EventService eventService;
+    private final AnalyzerGrpcClient analyzerGrpcClient;
 
     @GetMapping
     public List<EventShortDto> getEvents(@RequestParam(required = false) String text,
@@ -48,7 +55,24 @@ public class PublicEventController {
     }
 
     @GetMapping("/{id}")
-    public EventFullDto getEvent(@PathVariable Long id, HttpServletRequest request) {
-        return eventService.getPublicEventById(id, request.getRemoteAddr());
+    public EventFullDto getEvent(@PathVariable Long id,
+                                 @RequestHeader("X-EWM-USER-ID") Long userId,
+                                 HttpServletRequest request) {
+        return eventService.getPublicEventById(id, userId, request.getRemoteAddr());
+    }
+
+    @GetMapping("/recommendations")
+    public List<EventShortDto> getRecommendations(
+            @RequestHeader("X-EWM-USER-ID") Long userId,
+            @RequestParam(defaultValue = "10") @Min(1) int size) {
+        return eventService.getRecommendations(userId, size);
+    }
+
+    @PutMapping("/{eventId}/like")
+    public ResponseEntity<Void> likeEvent(
+            @RequestHeader("X-EWM-USER-ID") Long userId,
+            @PathVariable Long eventId) {
+        eventService.likeEvent(userId, eventId);
+        return ResponseEntity.ok().build();
     }
 }

@@ -18,7 +18,7 @@ public interface EventService {
 
     List<EventShortDto> getPublicEvents(PublicEventSearchRequest requestParams, Pageable pageable, String ip);
 
-    EventFullDto getPublicEventById(Long eventId, String ip);
+    EventFullDto getPublicEventById(Long eventId, Long userId, String ip);
 
     boolean existsById(Long eventId);
 
@@ -35,4 +35,8 @@ public interface EventService {
     String getEventState(Long eventId);
 
     Event getEventByIdForFeign(Long eventId);
+
+    List<EventShortDto> getRecommendations(Long userId, int size);
+
+    void likeEvent(Long userId, Long eventId);
 }

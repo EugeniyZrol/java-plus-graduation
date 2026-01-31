@@ -16,15 +16,23 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 public class EventFullDto {
     private String annotation;
+
     private CategoryDto category;
+
     private Long confirmedRequests;
+
     @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime createdOn;
+
     private String description;
+
     @JsonFormat(shape = JsonFormat.Shape.STRING, pattern = "yyyy-MM-dd HH:mm:ss")
     private LocalDateTime eventDate;
+
     private Long id;
+
     private UserShortDto initiator;
+
     private LocationDto location;
 
     @Builder.Default
@@ -40,7 +48,9 @@ public class EventFullDto {
     private Boolean requestModeration = true;
 
     private String state;
+
     private String title;
-    private Long views;
+
+    private Double rating;
 
 }

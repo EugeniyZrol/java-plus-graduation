@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import ru.practicum.ewm.stats.client.CollectorGrpcClient;
 import ru.practicum.interaction.dto.request.EventRequestStatusUpdateRequest;
 import ru.practicum.interaction.dto.request.EventRequestStatusUpdateResult;
 import ru.practicum.interaction.dto.request.ParticipationRequestDto;
@@ -30,6 +31,7 @@ public class ParticipationRequestServiceImpl implements ParticipationRequestServ
     private final EventClient eventClient;
     private final ParticipationRequestMapper requestMapper;
     private final RequestStatsService requestStatsService;
+    private final CollectorGrpcClient collectorGrpcClient;
 
     @Override
     public List<ParticipationRequestDto> getUserRequests(Long userId) {
@@ -84,6 +86,7 @@ public class ParticipationRequestServiceImpl implements ParticipationRequestServ
 
         ParticipationRequest savedRequest = requestRepository.save(request);
         log.info("Запрос создан с id: {}", savedRequest.getId());
+        collectorGrpcClient.sendRegister(userId, eventId);
         return requestMapper.toDto(savedRequest);
     }
 

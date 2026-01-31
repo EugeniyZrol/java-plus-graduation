@@ -6,7 +6,7 @@ spring:
     name: event-service
 
   datasource:
-    url: jdbc:postgresql://localhost:5432/main
+    url: jdbc:postgresql://localhost:5433/main
     username: user
     password: password
 
@@ -24,6 +24,15 @@ spring:
 
   jackson:
     time-zone: UTC
+
+grpc:
+  client:
+    analyzer:
+      address: 'discovery:///analyzer'
+      negotiationType: plaintext
+    collector:
+      address: 'discovery:///collector'
+      negotiationType: plaintext
 
 resilience4j:
   circuitbreaker:
