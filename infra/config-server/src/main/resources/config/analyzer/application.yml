@@ -24,7 +24,7 @@ spring:
         dialect: org.hibernate.dialect.PostgreSQLDialect
     show-sql: false
   kafka:
-    bootstrap-servers: localhost:9092
+    bootstrap-servers: kafka:29092
     consumer:
       group-id: analyzer-group
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
