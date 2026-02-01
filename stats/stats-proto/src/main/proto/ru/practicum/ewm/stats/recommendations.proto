@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-package ru.practicum.ewm.stats;
+package stats.service.dashboard;
 
 import "google/protobuf/empty.proto";
 
