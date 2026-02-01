@@ -9,6 +9,22 @@ spring:
       enabled: false
   kafka:
     bootstrap-servers: localhost:9092
+    consumer:
+      group-id: aggregator-group
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: ru.practicum.ewm.stats.kafka.AvroDeserializer
+      properties:
+        value.deserializer.target.type: ru.practicum.ewm.stats.avro.UserActionAvro
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      max-poll-records: 500
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: ru.practicum.ewm.stats.kafka.AvroSerializer
+      properties:
+        acks: all
+        retries: 3
+        batch.size: 16384
 
 aggregator:
   kafka:

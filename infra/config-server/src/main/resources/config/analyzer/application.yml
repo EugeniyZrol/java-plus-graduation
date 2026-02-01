@@ -4,6 +4,7 @@ server:
 grpc:
   server:
     port: 0
+
 spring:
   application:
     name: analyzer
@@ -11,7 +12,7 @@ spring:
     config:
       enabled: false
   datasource:
-    url: jdbc:postgresql://localhost:5432/stats
+    url: jdbc:postgresql://localhost:5433/stats
     username: user
     password: password
     driver-class-name: org.postgresql.Driver
@@ -24,9 +25,20 @@ spring:
     show-sql: false
   kafka:
     bootstrap-servers: localhost:9092
+    consumer:
+      group-id: analyzer-group
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: ru.practicum.ewm.stats.kafka.AvroDeserializer
+      properties:
+        value.deserializer.target.type: ru.practicum.ewm.stats.avro.EventSimilarityAvro
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      max-poll-records: 500
     listener:
       auto-startup: false
       missing-topics-fatal: false
+      concurrency: 3
+
 analyzer:
   kafka:
     consumer:

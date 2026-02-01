@@ -9,6 +9,13 @@ spring:
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: ru.practicum.ewm.stats.kafka.AvroSerializer
+      properties:
+        acks: all
+        retries: 3
+        max.block.ms: 5000
+        batch.size: 16384
+        linger.ms: 1
+        buffer.memory: 33554432
 
 grpc:
   server:
