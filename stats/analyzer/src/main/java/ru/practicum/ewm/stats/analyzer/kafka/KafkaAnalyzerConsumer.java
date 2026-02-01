@@ -21,11 +21,11 @@ public class KafkaAnalyzerConsumer {
     private final EventSimilarityRepository similarityRepository;
     private final UserInteractionRepository interactionRepository;
 
-    @KafkaListener(topics = "stats.events-similarity.v1")
+    @KafkaListener(topics = "stats.events-similarity.v1", containerFactory = "similarityContainerFactory")
     @Transactional
     public void consumeSimilarity(EventSimilarityAvro message) {
         try {
-            log.debug("Получено сходство: eventA={}, eventB={}, score={}",
+            log.info("Получено сходство: eventA={}, eventB={}, score={}",
                     message.getEventA(), message.getEventB(), message.getScore());
 
             EventSimilarityEntity entity = similarityRepository
@@ -43,11 +43,11 @@ public class KafkaAnalyzerConsumer {
         }
     }
 
-    @KafkaListener(topics = "stats.user-actions.v1")
+    @KafkaListener(topics = "stats.user-actions.v1", containerFactory = "userActionContainerFactory")
     @Transactional
     public void consumeUserAction(UserActionAvro message) {
         try {
-            log.debug("Получено пользовательское действие: userId={}, eventId={}, action={}",
+            log.info("Получено действие: userId={}, eventId={}, action={}",
                     message.getUserId(), message.getEventId(), message.getActionType());
 
             double weight = getActionWeight(message.getActionType().toString());
@@ -59,18 +59,15 @@ public class KafkaAnalyzerConsumer {
             if (entity.getMaxWeight() == null || weight > entity.getMaxWeight()) {
                 entity.setUserId(message.getUserId());
                 entity.setEventId(message.getEventId());
-                entity.setMaxWeight(weight);  // Только максимальный вес
+                entity.setMaxWeight(weight);
                 entity.setLastActionAt(message.getTimestamp());
                 interactionRepository.save(entity);
-                log.debug("Сохранено взаимодействие: userId={}, eventId={}, maxWeight={}",
+                log.info("Сохранено: userId={}, eventId={}, weight={}",
                         message.getUserId(), message.getEventId(), weight);
-            } else {
-                log.debug("Текущий вес {} не больше максимального {}",
-                        weight, entity.getMaxWeight());
             }
 
         } catch (Exception e) {
-            log.error("Ошибка обработки сообщения о действии пользователя: {}", e.getMessage(), e);
+            log.error("Ошибка обработки действия пользователя: {}", e.getMessage(), e);
         }
     }
 
