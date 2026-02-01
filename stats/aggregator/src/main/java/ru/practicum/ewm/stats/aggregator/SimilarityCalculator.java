@@ -53,19 +53,13 @@ public class SimilarityCalculator {
             Double otherWeight = otherEventUsers.get(userId);
 
             if (otherWeight != null) {
-                double oldMin = Math.min(
-                        userWeights.get(updatedEventId).get(userId) - weightDiff,
-                        otherWeight
-                );
-                double newMin = Math.min(
-                        userWeights.get(updatedEventId).get(userId),
-                        otherWeight
-                );
+                double oldWeightForEvent = userWeights.get(updatedEventId).get(userId) - weightDiff;
+
+                double oldMin = Math.min(oldWeightForEvent, otherWeight);
+                double newMin = Math.min(userWeights.get(updatedEventId).get(userId), otherWeight);
 
                 putMinSum(updatedEventId, otherEventId,
                         getMinSum(updatedEventId, otherEventId) - oldMin + newMin);
-
-                updatedEvents.add(otherEventId);
             }
         }
     }
