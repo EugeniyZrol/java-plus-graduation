@@ -17,18 +17,19 @@ public class SimilarityCalculator {
     private final Map<Long, Map<Long, Double>> userWeights = new HashMap<>();
     private final Map<Long, Double> eventSums = new HashMap<>();
     private final Map<Long, Map<Long, Double>> minWeightsSums = new HashMap<>();
-    @Getter
-    private final Set<Long> updatedEvents = new HashSet<>();
-
-    public double getCosineSimilarity(long eventA, long eventB) {
-        return calculateCosineSimilarity(eventA, eventB);
-    }
 
     public List<EventSimilarityAvro> processAction(long userId, long eventId, double weight, Instant timestamp) {
-        Map<Long, Double> eventUsers = userWeights.computeIfAbsent(eventId, k -> new HashMap<>());
+        log.info("Processing action: userId={}, eventId={}, weight={}", userId, eventId, weight);
+
+        if (!userWeights.containsKey(eventId)) {
+            return handleNewEvent(userId, eventId, weight, timestamp);
+        }
+
+        Map<Long, Double> eventUsers = userWeights.get(eventId);
         Double oldWeight = eventUsers.get(userId);
 
         if (oldWeight != null && oldWeight >= weight) {
+            log.debug("Вес не увеличился: текущий={}, новый={}", oldWeight, weight);
             return Collections.emptyList();
         }
 
@@ -66,16 +67,65 @@ public class SimilarityCalculator {
                 putMinSum(eventId, otherEventId, oldSmin + sMinDiff);
 
                 double similarity = calculateCosineSimilarity(eventId, otherEventId);
+
                 if (similarity > 0.0) {
                     long first = Math.min(eventId, otherEventId);
                     long second = Math.max(eventId, otherEventId);
 
-                    messages.add(EventSimilarityAvro.newBuilder()
+                    EventSimilarityAvro message = EventSimilarityAvro.newBuilder()
                             .setEventA(first)
                             .setEventB(second)
                             .setScore(similarity)
                             .setTimestamp(timestamp)
-                            .build());
+                            .build();
+                    messages.add(message);
+
+                    log.debug("Рассчитано сходство: eventA={}, eventB={}, score={}",
+                            first, second, similarity);
+                }
+            }
+        }
+
+        return messages;
+    }
+
+    private List<EventSimilarityAvro> handleNewEvent(long userId, long eventId, double weight, Instant timestamp) {
+        log.info("Первое взаимодействие с мероприятием: eventId={}, userId={}, weight={}",
+                eventId, userId, weight);
+
+        Map<Long, Double> eventUsers = new HashMap<>();
+        eventUsers.put(userId, weight);
+        userWeights.put(eventId, eventUsers);
+        eventSums.put(eventId, weight);
+
+        List<EventSimilarityAvro> messages = new ArrayList<>();
+
+        for (Long otherEventId : userWeights.keySet()) {
+            if (otherEventId.equals(eventId)) continue;
+
+            Map<Long, Double> otherEventUsers = userWeights.get(otherEventId);
+
+            if (otherEventUsers.containsKey(userId)) {
+                double otherWeight = otherEventUsers.get(userId);
+                double sMin = Math.min(weight, otherWeight);
+
+                putMinSum(eventId, otherEventId, sMin);
+                double similarity = calculateCosineSimilarity(eventId, otherEventId);
+
+                if (similarity > 0.0) {
+                    long first = Math.min(eventId, otherEventId);
+                    long second = Math.max(eventId, otherEventId);
+
+                    EventSimilarityAvro message = EventSimilarityAvro.newBuilder()
+                            .setEventA(first)
+                            .setEventB(second)
+                            .setScore(similarity)
+                            .setTimestamp(timestamp)
+                            .build();
+                    messages.add(message);
+
+                    log.debug("Новое сходство: eventA={}, eventB={}, score={}",
+                            first, second, similarity);
                 }
             }
         }
@@ -114,10 +164,11 @@ public class SimilarityCalculator {
     }
 
     public double getActionWeight(String actionType) {
-        return switch (actionType) {
-            case "VIEW" -> ActionWeights.VIEW;
-            case "REGISTER" -> ActionWeights.REGISTER;
-            case "LIKE" -> ActionWeights.LIKE;
+        String normalizedType = actionType.replace("ACTION_", "");
+        return switch (normalizedType) {
+            case "VIEW" -> ActionWeights.VIEW;      // 0.4
+            case "REGISTER" -> ActionWeights.REGISTER; // 0.8
+            case "LIKE" -> ActionWeights.LIKE;      // 1.2
             default -> 0.0;
         };
     }
