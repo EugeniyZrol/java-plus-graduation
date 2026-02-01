@@ -30,6 +30,9 @@ aggregator:
   kafka:
     producer:
       topic: stats.events-similarity.v1
+      properties:
+        compression.type: snappy
+        linger.ms: 10
     consumer:
       topic: stats.user-actions.v1
       poll-timeout: 100ms

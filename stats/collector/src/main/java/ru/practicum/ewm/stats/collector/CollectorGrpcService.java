@@ -1,11 +1,13 @@
 package ru.practicum.ewm.stats.collector;
 
+import ru.practicum.ewm.stats.proto.ActionTypeProto;
 import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.devh.boot.grpc.server.service.GrpcService;
 import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.kafka.support.SendResult;
 import ru.practicum.ewm.stats.avro.ActionTypeAvro;
 import ru.practicum.ewm.stats.avro.UserActionAvro;
 import ru.practicum.ewm.stats.proto.UserActionControllerGrpc;
@@ -13,6 +15,7 @@ import ru.practicum.ewm.stats.proto.UserActionProto;
 import com.google.protobuf.Empty;
 
 import java.time.Instant;
+import java.util.concurrent.CompletableFuture;
 
 @Slf4j
 @GrpcService
@@ -42,7 +45,9 @@ public class CollectorGrpcService extends UserActionControllerGrpc.UserActionCon
 
             log.debug("Отправляю в Kafka топик {}: {}", TOPIC, avroMessage);
 
-            kafkaTemplate.send(TOPIC, avroMessage).whenComplete((result, ex) -> {
+            CompletableFuture<SendResult<String, UserActionAvro>> future = kafkaTemplate.send(TOPIC, avroMessage);
+
+            future.whenComplete((result, ex) -> {
                 if (ex == null) {
                     log.debug("Сообщение успешно отправлено в Kafka: {}", result);
                     responseObserver.onNext(Empty.getDefaultInstance());
@@ -63,7 +68,7 @@ public class CollectorGrpcService extends UserActionControllerGrpc.UserActionCon
         }
     }
 
-    private ActionTypeAvro mapActionType(ru.practicum.ewm.stats.proto.ActionTypeProto protoType) {
+    private ActionTypeAvro mapActionType(ActionTypeProto protoType) {
         return switch (protoType) {
             case ACTION_VIEW -> ActionTypeAvro.VIEW;
             case ACTION_REGISTER -> ActionTypeAvro.REGISTER;

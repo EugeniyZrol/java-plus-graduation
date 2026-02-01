@@ -1,5 +1,6 @@
 package ru.practicum.ewm.stats.client;
 
+import com.google.protobuf.Empty;
 import io.grpc.StatusRuntimeException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -19,22 +20,24 @@ public class CollectorGrpcClient {
 
     public void sendUserAction(long userId, long eventId, ActionTypeProto actionType) {
         try {
+            Instant now = Instant.now();
             UserActionProto request = UserActionProto.newBuilder()
                     .setUserId(userId)
                     .setEventId(eventId)
                     .setActionType(actionType)
                     .setTimestamp(com.google.protobuf.Timestamp.newBuilder()
-                            .setSeconds(Instant.now().getEpochSecond())
-                            .setNanos(Instant.now().getNano())
+                            .setSeconds(now.getEpochSecond())
+                            .setNanos(now.getNano())
                             .build())
                     .build();
 
-            collectorStub.collectUserAction(request);
-            log.debug("Отправлено пользовательское действие в Collector: userId={}, eventId={}, action={}",
+            Empty response = collectorStub.collectUserAction(request);
+
+            log.debug("Отправлено пользовательское действие: userId={}, eventId={}, action={}",
                     userId, eventId, actionType);
 
         } catch (StatusRuntimeException e) {
-            log.error("Не удалось отправить пользовательское действие в Collector: {}", e.getMessage(), e);
+            log.error("Не удалось отправить пользовательское действие: {}", e.getMessage(), e);
         }
     }
 

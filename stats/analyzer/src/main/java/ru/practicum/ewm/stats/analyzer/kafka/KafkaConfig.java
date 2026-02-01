@@ -18,6 +18,9 @@ import java.util.Map;
 @Configuration
 public class KafkaConfig {
 
+    @Value("${spring.kafka.consumer.properties.specific.avro.reader:true}")
+    private String specificAvroReader;
+
     @Bean
     public ConsumerFactory<String, UserActionAvro> userActionConsumerFactory(
             @Value("${spring.kafka.bootstrap-servers}") String bootstrapServers) {
@@ -26,7 +29,7 @@ public class KafkaConfig {
         props.put(ConsumerConfig.GROUP_ID_CONFIG, "analyzer-group");
         props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
         props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, AvroDeserializer.class);
-        props.put("value.deserializer.target.type", UserActionAvro.class.getName());
+        props.put("specific.avro.reader", specificAvroReader);
         return new DefaultKafkaConsumerFactory<>(props);
     }
 
@@ -38,7 +41,7 @@ public class KafkaConfig {
         props.put(ConsumerConfig.GROUP_ID_CONFIG, "analyzer-group");
         props.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
         props.put(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, AvroDeserializer.class);
-        props.put("value.deserializer.target.type", EventSimilarityAvro.class.getName());
+        props.put("specific.avro.reader", specificAvroReader);
         return new DefaultKafkaConsumerFactory<>(props);
     }
 

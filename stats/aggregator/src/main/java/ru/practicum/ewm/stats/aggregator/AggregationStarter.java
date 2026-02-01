@@ -53,6 +53,11 @@ public class AggregationStarter implements ApplicationRunner {
                 similarityCalculator.processAction(userId, eventId, weight);
                 sendUpdatedSimilarities(eventId);
             });
+
+            if (!records.isEmpty()) {
+                kafkaConsumer.commitSync();
+                log.debug("Зафиксированы offsets для {} сообщений", records.count());
+            }
         }
     }
 
@@ -61,7 +66,8 @@ public class AggregationStarter implements ApplicationRunner {
             if (otherEventId.equals(updatedEventId)) return;
 
             double similarity = similarityCalculator.getCosineSimilarity(updatedEventId, otherEventId);
-            if (similarity > 0) {
+
+            if (similarityCalculator.shouldSendSimilarity(updatedEventId, otherEventId, similarity)) {
                 long first = Math.min(updatedEventId, otherEventId);
                 long second = Math.max(updatedEventId, otherEventId);
 
@@ -72,11 +78,10 @@ public class AggregationStarter implements ApplicationRunner {
                         .setTimestamp(Instant.now())
                         .build();
 
+                String key = first + "_" + second;
                 kafkaProducer.send(new ProducerRecord<>(
                         kafkaProperties.getProducer().getTopic(),
-                        null,
-                        System.currentTimeMillis(),
-                        first + "_" + second,
+                        key,
                         similarityAvro
                 ));
                 log.debug("Отправлено сходство: eventA={}, eventB={}, score={}", first, second, similarity);

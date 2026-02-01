@@ -3,6 +3,7 @@ package ru.practicum.ewm.stats.aggregator;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
+import ru.practicum.ewm.stats.dto.ActionWeights;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -15,10 +16,6 @@ public class SimilarityCalculator {
     private final Map<Long, Map<Long, Double>> userWeights = new HashMap<>();
     private final Map<Long, Double> eventSums = new HashMap<>();
     private final Map<Long, Map<Long, Double>> minWeightsSums = new HashMap<>();
-
-    private static final double VIEW_WEIGHT = 1.0;
-    private static final double REGISTER_WEIGHT = 2.0;
-    private static final double LIKE_WEIGHT = 3.0;
 
     public double getCosineSimilarity(long eventA, long eventB) {
         return calculateCosineSimilarity(eventA, eventB);
@@ -65,6 +62,9 @@ public class SimilarityCalculator {
                 double similarity = calculateCosineSimilarity(updatedEventId, otherEventId);
                 log.debug("Similarity updated: eventA={}, eventB={}, similarity={}",
                         updatedEventId, otherEventId, similarity);
+            } else {
+                log.debug("Пользователь {} не взаимодействовал с событием {}, minWeight=0",
+                        userId, otherEventId);
             }
         }
     }
@@ -101,10 +101,14 @@ public class SimilarityCalculator {
 
     public double getActionWeight(String actionType) {
         return switch (actionType) {
-            case "VIEW" -> VIEW_WEIGHT;
-            case "REGISTER" -> REGISTER_WEIGHT;
-            case "LIKE" -> LIKE_WEIGHT;
+            case "VIEW" -> ActionWeights.VIEW;
+            case "REGISTER" -> ActionWeights.REGISTER;
+            case "LIKE" -> ActionWeights.LIKE;
             default -> 0.0;
         };
+    }
+
+    public boolean shouldSendSimilarity(long eventA, long eventB, double similarity) {
+        return similarity > 0.01;
     }
 }

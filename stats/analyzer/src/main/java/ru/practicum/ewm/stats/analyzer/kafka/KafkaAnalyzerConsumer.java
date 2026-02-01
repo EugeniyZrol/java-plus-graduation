@@ -11,6 +11,7 @@ import ru.practicum.ewm.stats.analyzer.repository.EventSimilarityRepository;
 import ru.practicum.ewm.stats.analyzer.repository.UserInteractionRepository;
 import ru.practicum.ewm.stats.avro.EventSimilarityAvro;
 import ru.practicum.ewm.stats.avro.UserActionAvro;
+import ru.practicum.ewm.stats.dto.ActionWeights;
 
 @Component
 @Slf4j
@@ -70,9 +71,9 @@ public class KafkaAnalyzerConsumer {
 
     private double getActionWeight(String actionType) {
         return switch (actionType) {
-            case "VIEW" -> 1.0;
-            case "REGISTER" -> 2.0;
-            case "LIKE" -> 3.0;
+            case "VIEW" -> ActionWeights.VIEW;
+            case "REGISTER" -> ActionWeights.REGISTER;
+            case "LIKE" -> ActionWeights.LIKE;
             default -> 0.0;
         };
     }

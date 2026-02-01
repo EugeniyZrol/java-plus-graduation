@@ -66,21 +66,18 @@ public class RecommendationsGrpcService extends
     public void getInteractionsCount(InteractionsCountRequestProto request,
                                      StreamObserver<RecommendedEventProto> responseObserver) {
         try {
-            log.info("Получение количества взаимодействий для {} событий", request.getEventIdCount());
-
             request.getEventIdList().forEach(eventId -> {
                 Double totalWeight = interactionRepository.sumWeightsByEventId(eventId);
+
                 RecommendedEventProto response = RecommendedEventProto.newBuilder()
                         .setEventId(eventId)
                         .setScore(totalWeight != null ? totalWeight : 0.0)
                         .build();
                 responseObserver.onNext(response);
             });
-
             responseObserver.onCompleted();
-
         } catch (Exception e) {
-            log.error("Ошибка получения количества взаимодействий: {}", e.getMessage(), e);
+            log.error("Ошибка: {}", e.getMessage(), e);
             responseObserver.onError(e);
         }
     }

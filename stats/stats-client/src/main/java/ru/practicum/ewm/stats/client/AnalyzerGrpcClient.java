@@ -8,6 +8,8 @@ import org.springframework.stereotype.Component;
 import ru.practicum.ewm.stats.proto.*;
 import ru.practicum.ewm.stats.model.RecommendedEvent;
 
+import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
@@ -27,11 +29,15 @@ public class AnalyzerGrpcClient {
                     .setMaxResults(maxResults)
                     .build();
 
-            var iterator = analyzerStub.getRecommendationsForUser(request);
+            Iterator<RecommendedEventProto> iterator = analyzerStub.getRecommendationsForUser(request);
 
-            return StreamSupport.stream(((Iterable<RecommendedEventProto>) () -> iterator).spliterator(), false)
-                    .map(proto -> new RecommendedEvent(proto.getEventId(), proto.getScore()))
-                    .collect(Collectors.toList());
+            List<RecommendedEvent> result = new ArrayList<>();
+            while (iterator.hasNext()) {
+                RecommendedEventProto proto = iterator.next();
+                result.add(new RecommendedEvent(proto.getEventId(), proto.getScore()));
+            }
+
+            return result;
 
         } catch (StatusRuntimeException e) {
             log.error("Не удалось получить рекомендации: {}", e.getMessage(), e);
@@ -65,10 +71,14 @@ public class AnalyzerGrpcClient {
                     .addEventId(eventId)
                     .build();
 
-            var iterator = analyzerStub.getInteractionsCount(request);
-            var result = iterator.next();
+            Iterator<RecommendedEventProto> iterator = analyzerStub.getInteractionsCount(request);
 
-            return result.getScore();
+            if (iterator.hasNext()) {
+                RecommendedEventProto result = iterator.next();
+                return result.getScore();
+            }
+
+            return 0.0;
 
         } catch (StatusRuntimeException e) {
             log.error("Не удалось получить рейтинг события: {}", e.getMessage(), e);
