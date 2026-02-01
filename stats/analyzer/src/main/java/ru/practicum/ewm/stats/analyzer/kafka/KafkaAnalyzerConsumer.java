@@ -28,14 +28,17 @@ public class KafkaAnalyzerConsumer {
             log.info("Получено сходство: eventA={}, eventB={}, score={}",
                     message.getEventA(), message.getEventB(), message.getScore());
 
-            EventSimilarityEntity entity = similarityRepository
-                    .findByEventAAndEventB(message.getEventA(), message.getEventB())
-                    .orElse(new EventSimilarityEntity());
+            Long eventA = Math.min(message.getEventA(), message.getEventB());
+            Long eventB = Math.max(message.getEventA(), message.getEventB());
 
-            entity.setEventA(message.getEventA());
-            entity.setEventB(message.getEventB());
+            similarityRepository.deleteByEventAAndEventB(eventA, eventB);
+
+            EventSimilarityEntity entity = new EventSimilarityEntity();
+            entity.setEventA(eventA);
+            entity.setEventB(eventB);
             entity.setScore(message.getScore());
             entity.setUpdatedAt(message.getTimestamp());
+
             similarityRepository.save(entity);
 
         } catch (Exception e) {

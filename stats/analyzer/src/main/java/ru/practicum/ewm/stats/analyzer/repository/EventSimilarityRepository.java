@@ -2,6 +2,7 @@ package ru.practicum.ewm.stats.analyzer.repository;
 
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import ru.practicum.ewm.stats.analyzer.model.EventSimilarityEntity;
@@ -17,4 +18,8 @@ public interface EventSimilarityRepository extends JpaRepository<EventSimilarity
             "WHERE (e.eventA = :eventId OR e.eventB = :eventId) " +
             "ORDER BY e.score DESC")
     List<EventSimilarityEntity> findSimilarEvents(@Param("eventId") Long eventId, Pageable pageable);
+
+    @Modifying
+    @Query("DELETE FROM EventSimilarityEntity e WHERE e.eventA = :eventA AND e.eventB = :eventB")
+    void deleteByEventAAndEventB(@Param("eventA") Long eventA, @Param("eventB") Long eventB);
 }
