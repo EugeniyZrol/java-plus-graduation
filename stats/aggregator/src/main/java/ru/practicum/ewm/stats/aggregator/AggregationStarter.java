@@ -15,6 +15,7 @@ import ru.practicum.ewm.stats.avro.UserActionAvro;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.Set;
 
 @Slf4j
@@ -65,17 +66,22 @@ public class AggregationStarter implements ApplicationRunner {
     private void sendUpdatedSimilarities() {
         Set<Long> updatedEvents = similarityCalculator.getUpdatedEvents();
         Set<Long> allEventIds = similarityCalculator.getUserWeights().keySet();
+        Set<String> sentPairs = new HashSet<>();
 
         for (Long eventA : updatedEvents) {
             for (Long eventB : allEventIds) {
                 if (eventA.equals(eventB)) continue;
 
-                double similarity = similarityCalculator.getCosineSimilarity(eventA, eventB);
+                long first = Math.min(eventA, eventB);
+                long second = Math.max(eventA, eventB);
+                String pairKey = first + "_" + second;
 
-                if (similarityCalculator.shouldSendSimilarity(eventA, eventB, similarity)) {
-                    long first = Math.min(eventA, eventB);
-                    long second = Math.max(eventA, eventB);
+                if (sentPairs.contains(pairKey)) continue;
+                sentPairs.add(pairKey);
 
+                double similarity = similarityCalculator.getCosineSimilarity(first, second);
+
+                if (similarityCalculator.shouldSendSimilarity(first, second, similarity)) {
                     EventSimilarityAvro similarityAvro = EventSimilarityAvro.newBuilder()
                             .setEventA(first)
                             .setEventB(second)
@@ -83,10 +89,9 @@ public class AggregationStarter implements ApplicationRunner {
                             .setTimestamp(Instant.now())
                             .build();
 
-                    String key = first + "_" + second;
                     kafkaProducer.send(new ProducerRecord<>(
                             kafkaProperties.getProducer().getTopic(),
-                            key,
+                            pairKey,
                             similarityAvro
                     ));
                     log.debug("Отправлено сходство: eventA={}, eventB={}, score={}",
