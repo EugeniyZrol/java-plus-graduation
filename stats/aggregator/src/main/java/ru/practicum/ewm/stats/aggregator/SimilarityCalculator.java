@@ -6,7 +6,9 @@ import org.springframework.stereotype.Component;
 import ru.practicum.ewm.stats.dto.ActionWeights;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 
 @Component
 @Slf4j
@@ -16,6 +18,8 @@ public class SimilarityCalculator {
     private final Map<Long, Map<Long, Double>> userWeights = new HashMap<>();
     private final Map<Long, Double> eventSums = new HashMap<>();
     private final Map<Long, Map<Long, Double>> minWeightsSums = new HashMap<>();
+    @Getter
+    private final Set<Long> updatedEvents = new HashSet<>();
 
     public double getCosineSimilarity(long eventA, long eventB) {
         return calculateCosineSimilarity(eventA, eventB);
@@ -28,6 +32,7 @@ public class SimilarityCalculator {
         Double currentWeight = eventUsers.get(userId);
 
         if (currentWeight != null && currentWeight >= weight) {
+            log.debug("Вес не увеличился: текущий={}, новый={}", currentWeight, weight);
             return;
         }
 
@@ -35,6 +40,7 @@ public class SimilarityCalculator {
         eventUsers.put(userId, weight);
 
         eventSums.put(eventId, eventSums.getOrDefault(eventId, 0.0) + weightDiff);
+        updatedEvents.add(eventId);
 
         recalculateSimilarities(eventId, userId, weightDiff);
     }
@@ -59,14 +65,13 @@ public class SimilarityCalculator {
                 putMinSum(updatedEventId, otherEventId,
                         getMinSum(updatedEventId, otherEventId) - oldMin + newMin);
 
-                double similarity = calculateCosineSimilarity(updatedEventId, otherEventId);
-                log.debug("Similarity updated: eventA={}, eventB={}, similarity={}",
-                        updatedEventId, otherEventId, similarity);
-            } else {
-                log.debug("Пользователь {} не взаимодействовал с событием {}, minWeight=0",
-                        userId, otherEventId);
+                updatedEvents.add(otherEventId);
             }
         }
+    }
+
+    public void clearUpdatedEvents() {
+        updatedEvents.clear();
     }
 
     private double calculateCosineSimilarity(long eventA, long eventB) {

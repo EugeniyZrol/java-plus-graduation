@@ -55,40 +55,46 @@ public class AggregationStarter implements ApplicationRunner {
             });
 
             if (!records.isEmpty()) {
-                sendAllSimilarities();
+                sendUpdatedSimilarities();
                 kafkaConsumer.commitSync();
                 log.debug("Зафиксированы offsets для {} сообщений", records.count());
             }
         }
     }
 
-    private void sendAllSimilarities() {
-        Set<Long> eventIds = similarityCalculator.getUserWeights().keySet();
+    private void sendUpdatedSimilarities() {
+        Set<Long> updatedEvents = similarityCalculator.getUpdatedEvents();
+        Set<Long> allEventIds = similarityCalculator.getUserWeights().keySet();
 
-        for (Long eventA : eventIds) {
-            for (Long eventB : eventIds) {
-                if (eventA >= eventB) continue;
+        for (Long eventA : updatedEvents) {
+            for (Long eventB : allEventIds) {
+                if (eventA.equals(eventB)) continue;
 
                 double similarity = similarityCalculator.getCosineSimilarity(eventA, eventB);
 
                 if (similarityCalculator.shouldSendSimilarity(eventA, eventB, similarity)) {
+                    long first = Math.min(eventA, eventB);
+                    long second = Math.max(eventA, eventB);
+
                     EventSimilarityAvro similarityAvro = EventSimilarityAvro.newBuilder()
-                            .setEventA(eventA)
-                            .setEventB(eventB)
+                            .setEventA(first)
+                            .setEventB(second)
                             .setScore(similarity)
                             .setTimestamp(Instant.now())
                             .build();
 
-                    String key = eventA + "_" + eventB;
+                    String key = first + "_" + second;
                     kafkaProducer.send(new ProducerRecord<>(
                             kafkaProperties.getProducer().getTopic(),
                             key,
                             similarityAvro
                     ));
                     log.debug("Отправлено сходство: eventA={}, eventB={}, score={}",
-                            eventA, eventB, similarity);
+                            first, second, similarity);
                 }
             }
         }
+
+        similarityCalculator.clearUpdatedEvents();
     }
 }
