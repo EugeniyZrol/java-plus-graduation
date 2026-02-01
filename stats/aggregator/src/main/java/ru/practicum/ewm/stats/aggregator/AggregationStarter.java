@@ -71,27 +71,26 @@ public class AggregationStarter implements ApplicationRunner {
 
         int sentCount = 0;
 
-        for (Long eventA : updatedEvents) {
-            Map<Long, Double> usersA = userWeights.get(eventA);
-            if (usersA == null) continue;
+        for (Long updatedEventId : updatedEvents) {
+            Map<Long, Double> updatedEventUsers = userWeights.get(updatedEventId);
+            if (updatedEventUsers == null) continue;
 
-            for (Long eventB : userWeights.keySet()) {
-                if (eventA.equals(eventB)) continue;
+            Set<Long> eventsWithCommonUsers = new HashSet<>();
+            for (Long userId : updatedEventUsers.keySet()) {
+                for (Map.Entry<Long, Map<Long, Double>> entry : userWeights.entrySet()) {
+                    Long otherEventId = entry.getKey();
+                    if (updatedEventId.equals(otherEventId)) continue;
 
-                Map<Long, Double> usersB = userWeights.get(eventB);
-                if (usersB == null) continue;
-
-                boolean hasCommon = false;
-                for (Long userId : usersA.keySet()) {
-                    if (usersB.containsKey(userId)) {
-                        hasCommon = true;
-                        break;
+                    Map<Long, Double> otherEventUsers = entry.getValue();
+                    if (otherEventUsers.containsKey(userId)) {
+                        eventsWithCommonUsers.add(otherEventId);
                     }
                 }
-                if (!hasCommon) continue;
+            }
 
-                long first = Math.min(eventA, eventB);
-                long second = Math.max(eventA, eventB);
+            for (Long otherEventId : eventsWithCommonUsers) {
+                long first = Math.min(updatedEventId, otherEventId);
+                long second = Math.max(updatedEventId, otherEventId);
                 String pairKey = first + "_" + second;
 
                 if (sentPairs.contains(pairKey)) continue;
@@ -99,7 +98,7 @@ public class AggregationStarter implements ApplicationRunner {
 
                 double similarity = similarityCalculator.getCosineSimilarity(first, second);
 
-                if (similarity > 0.0) {
+                if (similarityCalculator.shouldSendSimilarity(first, second, similarity)) {
                     EventSimilarityAvro similarityAvro = EventSimilarityAvro.newBuilder()
                             .setEventA(first)
                             .setEventB(second)
