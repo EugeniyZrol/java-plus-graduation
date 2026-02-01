@@ -16,6 +16,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 
 @Slf4j
@@ -77,7 +78,10 @@ public class AggregationStarter implements ApplicationRunner {
                 String pairKey = first + "_" + second;
 
                 if (sentPairs.contains(pairKey)) continue;
-                sentPairs.add(pairKey);
+
+                if (!hasCommonUsers(eventA, eventB)) {
+                    continue;
+                }
 
                 double similarity = similarityCalculator.getCosineSimilarity(first, second);
 
@@ -96,10 +100,20 @@ public class AggregationStarter implements ApplicationRunner {
                     ));
                     log.debug("Отправлено сходство: eventA={}, eventB={}, score={}",
                             first, second, similarity);
+                    sentPairs.add(pairKey);
                 }
             }
         }
 
         similarityCalculator.clearUpdatedEvents();
+    }
+
+    private boolean hasCommonUsers(long eventA, long eventB) {
+        Map<Long, Double> usersA = similarityCalculator.getUserWeights().get(eventA);
+        Map<Long, Double> usersB = similarityCalculator.getUserWeights().get(eventB);
+
+        if (usersA == null || usersB == null) return false;
+
+        return usersA.keySet().stream().anyMatch(usersB::containsKey);
     }
 }
