@@ -59,9 +59,14 @@ public class KafkaAnalyzerConsumer {
             if (entity.getMaxWeight() == null || weight > entity.getMaxWeight()) {
                 entity.setUserId(message.getUserId());
                 entity.setEventId(message.getEventId());
-                entity.setMaxWeight(weight);
+                entity.setMaxWeight(weight);  // Только максимальный вес
                 entity.setLastActionAt(message.getTimestamp());
                 interactionRepository.save(entity);
+                log.debug("Сохранено взаимодействие: userId={}, eventId={}, maxWeight={}",
+                        message.getUserId(), message.getEventId(), weight);
+            } else {
+                log.debug("Текущий вес {} не больше максимального {}",
+                        weight, entity.getMaxWeight());
             }
 
         } catch (Exception e) {
