@@ -28,14 +28,14 @@ public class SimilarityCalculator {
         log.info("Processing action: userId={}, eventId={}, weight={}", userId, eventId, weight);
 
         Map<Long, Double> eventUsers = userWeights.computeIfAbsent(eventId, k -> new HashMap<>());
-        Double currentWeight = eventUsers.get(userId);
+        Double oldWeight = eventUsers.get(userId);
 
-        if (currentWeight != null && currentWeight >= weight) {
-            log.debug("Вес не увеличился: текущий={}, новый={}", currentWeight, weight);
+        if (oldWeight != null && oldWeight >= weight) {
+            log.debug("Вес не увеличился: текущий={}, новый={}", oldWeight, weight);
             return Collections.emptyList();
         }
 
-        double weightDiff = weight - (currentWeight != null ? currentWeight : 0.0);
+        double weightDiff = weight - (oldWeight != null ? oldWeight : 0.0);
         eventUsers.put(userId, weight);
 
         eventSums.put(eventId, eventSums.getOrDefault(eventId, 0.0) + weightDiff);
@@ -50,10 +50,9 @@ public class SimilarityCalculator {
             if (!otherEventUsers.containsKey(userId)) continue;
 
             double otherWeight = otherEventUsers.get(userId);
-            double oldWeightForEvent = userWeights.get(eventId).get(userId) - weightDiff;
 
-            double oldMin = Math.min(oldWeightForEvent, otherWeight);
-            double newMin = Math.min(userWeights.get(eventId).get(userId), otherWeight);
+            double oldMin = Math.min(oldWeight != null ? oldWeight : 0.0, otherWeight);
+            double newMin = Math.min(weight, otherWeight); // weight - новый вес
 
             putMinSum(eventId, otherEventId,
                     getMinSum(eventId, otherEventId) - oldMin + newMin);
@@ -118,9 +117,5 @@ public class SimilarityCalculator {
             case "LIKE" -> ActionWeights.LIKE;
             default -> 0.0;
         };
-    }
-
-    public boolean shouldSendSimilarity(long eventA, long eventB, double similarity) {
-        return similarity > 0.01;
     }
 }

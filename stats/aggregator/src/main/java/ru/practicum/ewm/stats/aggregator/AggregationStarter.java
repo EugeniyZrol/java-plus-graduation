@@ -13,8 +13,7 @@ import ru.practicum.ewm.stats.avro.EventSimilarityAvro;
 import ru.practicum.ewm.stats.avro.UserActionAvro;
 
 import java.time.Duration;
-import java.time.Instant;
-import java.util.*;
+import java.util.Collections;
 
 @Slf4j
 @Component
@@ -50,21 +49,19 @@ public class AggregationStarter implements ApplicationRunner {
                 String actionType = message.getActionType().toString();
                 double weight = similarityCalculator.getActionWeight(actionType);
 
-                List<EventSimilarityAvro> similarityMessages =
-                        similarityCalculator.processAction(userId, eventId, weight, message.getTimestamp());
-
-                for (EventSimilarityAvro similarityMessage : similarityMessages) {
-                    String key = similarityMessage.getEventA() + "_" + similarityMessage.getEventB();
-                    kafkaProducer.send(new ProducerRecord<>(
-                            kafkaProperties.getProducer().getTopic(),
-                            key,
-                            similarityMessage
-                    ));
-                    log.debug("Отправлено сходство: eventA={}, eventB={}, score={}",
-                            similarityMessage.getEventA(),
-                            similarityMessage.getEventB(),
-                            similarityMessage.getScore());
-                }
+                similarityCalculator.processAction(userId, eventId, weight, message.getTimestamp())
+                        .forEach(similarityMessage -> {
+                            String key = similarityMessage.getEventA() + "_" + similarityMessage.getEventB();
+                            kafkaProducer.send(new ProducerRecord<>(
+                                    kafkaProperties.getProducer().getTopic(),
+                                    key,
+                                    similarityMessage
+                            ));
+                            log.debug("Отправлено сходство: eventA={}, eventB={}, score={}",
+                                    similarityMessage.getEventA(),
+                                    similarityMessage.getEventB(),
+                                    similarityMessage.getScore());
+                        });
             });
 
             if (!records.isEmpty()) {
@@ -72,63 +69,5 @@ public class AggregationStarter implements ApplicationRunner {
                 log.debug("Зафиксированы offsets для {} сообщений", records.count());
             }
         }
-    }
-
-    private void sendUpdatedSimilarities() {
-        Set<Long> updatedEvents = similarityCalculator.getUpdatedEvents();
-        Map<Long, Map<Long, Double>> userWeights = similarityCalculator.getUserWeights();
-        Set<String> sentPairs = new HashSet<>();
-
-        int sentCount = 0;
-
-        for (Long updatedEventId : updatedEvents) {
-            Map<Long, Double> updatedEventUsers = userWeights.get(updatedEventId);
-            if (updatedEventUsers == null) continue;
-
-            Set<Long> eventsWithCommonUsers = new HashSet<>();
-            for (Long userId : updatedEventUsers.keySet()) {
-                for (Map.Entry<Long, Map<Long, Double>> entry : userWeights.entrySet()) {
-                    Long otherEventId = entry.getKey();
-                    if (updatedEventId.equals(otherEventId)) continue;
-
-                    Map<Long, Double> otherEventUsers = entry.getValue();
-                    if (otherEventUsers.containsKey(userId)) {
-                        eventsWithCommonUsers.add(otherEventId);
-                    }
-                }
-            }
-
-            for (Long otherEventId : eventsWithCommonUsers) {
-                long first = Math.min(updatedEventId, otherEventId);
-                long second = Math.max(updatedEventId, otherEventId);
-                String pairKey = first + "_" + second;
-
-                if (sentPairs.contains(pairKey)) continue;
-                sentPairs.add(pairKey);
-
-                double similarity = similarityCalculator.getCosineSimilarity(first, second);
-
-                if (similarityCalculator.shouldSendSimilarity(first, second, similarity)) {
-                    EventSimilarityAvro similarityAvro = EventSimilarityAvro.newBuilder()
-                            .setEventA(first)
-                            .setEventB(second)
-                            .setScore(similarity)
-                            .setTimestamp(Instant.now())
-                            .build();
-
-                    kafkaProducer.send(new ProducerRecord<>(
-                            kafkaProperties.getProducer().getTopic(),
-                            pairKey,
-                            similarityAvro
-                    ));
-                    log.debug("Отправлено сходство: eventA={}, eventB={}, score={}",
-                            first, second, similarity);
-                    sentCount++;
-                }
-            }
-        }
-
-        log.info("Отправлено {} сообщений о сходстве", sentCount);
-        similarityCalculator.clearUpdatedEvents();
     }
 }
