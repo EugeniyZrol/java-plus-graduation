@@ -1,5 +1,5 @@
 server:
-  port: 0
+  port: 9095
 
 spring:
   application:
@@ -34,17 +34,17 @@ aggregator:
       topic: stats.user-actions.v1
       poll-timeout: 100ms
 
-logging:
-  level:
-    ru.practicum.ewm.stats.aggregator: DEBUG
-
 eureka:
   client:
     service-url:
       defaultZone: http://localhost:8761/eureka/
+    enabled: true
     fetch-registry: true
     register-with-eureka: true
   instance:
     hostname: localhost
-    prefer-ip-address: true
-    instance-id: ${spring.application.name}:${spring.application.instance_id:${random.value}}
+    prefer-ip-address: false
+
+logging:
+  level:
+    ru.practicum.ewm.stats.aggregator: DEBUG

@@ -28,6 +28,10 @@ public class AggregationStarter implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) throws Exception {
+        new Thread(this::startKafkaConsumer, "kafka-aggregator-thread").start();
+    }
+
+    private void startKafkaConsumer() {
         kafkaConsumer.subscribe(Collections.singletonList(kafkaProperties.getConsumer().getTopic()));
         log.info("Подписан на топик: {}", kafkaProperties.getConsumer().getTopic());
 
