@@ -66,26 +66,40 @@ public class AggregationStarter implements ApplicationRunner {
 
     private void sendUpdatedSimilarities() {
         Set<Long> updatedEvents = similarityCalculator.getUpdatedEvents();
-        Set<Long> allEventIds = similarityCalculator.getUserWeights().keySet();
+        Map<Long, Map<Long, Double>> userWeights = similarityCalculator.getUserWeights();
         Set<String> sentPairs = new HashSet<>();
 
+        int sentCount = 0;
+
         for (Long eventA : updatedEvents) {
-            for (Long eventB : allEventIds) {
+            Map<Long, Double> usersA = userWeights.get(eventA);
+            if (usersA == null) continue;
+
+            for (Long eventB : userWeights.keySet()) {
                 if (eventA.equals(eventB)) continue;
+
+                Map<Long, Double> usersB = userWeights.get(eventB);
+                if (usersB == null) continue;
+
+                boolean hasCommon = false;
+                for (Long userId : usersA.keySet()) {
+                    if (usersB.containsKey(userId)) {
+                        hasCommon = true;
+                        break;
+                    }
+                }
+                if (!hasCommon) continue;
 
                 long first = Math.min(eventA, eventB);
                 long second = Math.max(eventA, eventB);
                 String pairKey = first + "_" + second;
 
                 if (sentPairs.contains(pairKey)) continue;
-
-                if (!hasCommonUsers(eventA, eventB)) {
-                    continue;
-                }
+                sentPairs.add(pairKey);
 
                 double similarity = similarityCalculator.getCosineSimilarity(first, second);
 
-                if (similarityCalculator.shouldSendSimilarity(first, second, similarity)) {
+                if (similarity > 0.0) {
                     EventSimilarityAvro similarityAvro = EventSimilarityAvro.newBuilder()
                             .setEventA(first)
                             .setEventB(second)
@@ -100,20 +114,12 @@ public class AggregationStarter implements ApplicationRunner {
                     ));
                     log.debug("Отправлено сходство: eventA={}, eventB={}, score={}",
                             first, second, similarity);
-                    sentPairs.add(pairKey);
+                    sentCount++;
                 }
             }
         }
 
+        log.info("Отправлено {} сообщений о сходстве", sentCount);
         similarityCalculator.clearUpdatedEvents();
-    }
-
-    private boolean hasCommonUsers(long eventA, long eventB) {
-        Map<Long, Double> usersA = similarityCalculator.getUserWeights().get(eventA);
-        Map<Long, Double> usersB = similarityCalculator.getUserWeights().get(eventB);
-
-        if (usersA == null || usersB == null) return false;
-
-        return usersA.keySet().stream().anyMatch(usersB::containsKey);
     }
 }
