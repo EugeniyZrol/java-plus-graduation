@@ -31,9 +31,10 @@ public class KafkaAnalyzerConsumer {
             Long eventA = Math.min(message.getEventA(), message.getEventB());
             Long eventB = Math.max(message.getEventA(), message.getEventB());
 
-            similarityRepository.deleteByEventAAndEventB(eventA, eventB);
+            EventSimilarityEntity entity = similarityRepository
+                    .findByEventAAndEventB(eventA, eventB)
+                    .orElse(new EventSimilarityEntity());
 
-            EventSimilarityEntity entity = new EventSimilarityEntity();
             entity.setEventA(eventA);
             entity.setEventB(eventB);
             entity.setScore(message.getScore());
