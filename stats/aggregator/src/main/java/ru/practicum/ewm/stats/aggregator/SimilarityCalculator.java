@@ -25,59 +25,56 @@ public class SimilarityCalculator {
     }
 
     public List<EventSimilarityAvro> processAction(long userId, long eventId, double weight, Instant timestamp) {
-        log.info("Processing action: userId={}, eventId={}, weight={}", userId, eventId, weight);
-
         Map<Long, Double> eventUsers = userWeights.computeIfAbsent(eventId, k -> new HashMap<>());
         Double oldWeight = eventUsers.get(userId);
 
         if (oldWeight != null && oldWeight >= weight) {
-            log.debug("Вес не увеличился: текущий={}, новый={}", oldWeight, weight);
             return Collections.emptyList();
         }
 
         double weightDiff = weight - (oldWeight != null ? oldWeight : 0.0);
         eventUsers.put(userId, weight);
-
         eventSums.put(eventId, eventSums.getOrDefault(eventId, 0.0) + weightDiff);
 
         List<EventSimilarityAvro> messages = new ArrayList<>();
 
-        for (Map.Entry<Long, Map<Long, Double>> entry : userWeights.entrySet()) {
-            Long otherEventId = entry.getKey();
+        for (Long otherEventId : userWeights.keySet()) {
             if (otherEventId.equals(eventId)) continue;
 
-            Map<Long, Double> otherEventUsers = entry.getValue();
-            if (!otherEventUsers.containsKey(userId)) continue;
+            Map<Long, Double> otherEventUsers = userWeights.get(otherEventId);
+            double sMinDiff = 0.0;
 
-            double otherWeight = otherEventUsers.get(userId);
+            for (Long uid : eventUsers.keySet()) {
+                if (otherEventUsers.containsKey(uid)) {
+                    double currentMin = Math.min(eventUsers.get(uid), otherEventUsers.get(uid));
 
-            double oldMin = Math.min(oldWeight != null ? oldWeight : 0.0, otherWeight);
-            double newMin = Math.min(weight, otherWeight); // weight - новый вес
+                    if (uid.equals(userId)) {
+                        double oldMin = Math.min(oldWeight != null ? oldWeight : 0.0, otherEventUsers.get(uid));
+                        sMinDiff += currentMin - oldMin;
+                    }
+                }
+            }
 
-            putMinSum(eventId, otherEventId,
-                    getMinSum(eventId, otherEventId) - oldMin + newMin);
+            if (sMinDiff != 0.0) {
+                double oldSmin = getMinSum(eventId, otherEventId);
+                putMinSum(eventId, otherEventId, oldSmin + sMinDiff);
 
-            double similarity = calculateCosineSimilarity(eventId, otherEventId);
+                double similarity = calculateCosineSimilarity(eventId, otherEventId);
+                if (similarity > 0.00) {
+                    long first = Math.min(eventId, otherEventId);
+                    long second = Math.max(eventId, otherEventId);
 
-            if (similarity > 0.01) {
-                long first = Math.min(eventId, otherEventId);
-                long second = Math.max(eventId, otherEventId);
-
-                EventSimilarityAvro message = EventSimilarityAvro.newBuilder()
-                        .setEventA(first)
-                        .setEventB(second)
-                        .setScore(similarity)
-                        .setTimestamp(timestamp)
-                        .build();
-                messages.add(message);
+                    messages.add(EventSimilarityAvro.newBuilder()
+                            .setEventA(first)
+                            .setEventB(second)
+                            .setScore(similarity)
+                            .setTimestamp(timestamp)
+                            .build());
+                }
             }
         }
 
         return messages;
-    }
-
-    public void clearUpdatedEvents() {
-        updatedEvents.clear();
     }
 
     private double calculateCosineSimilarity(long eventA, long eventB) {
