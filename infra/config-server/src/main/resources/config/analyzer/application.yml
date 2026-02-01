@@ -1,5 +1,5 @@
 server:
-  port: 0
+  port: 8083
 
 grpc:
   server:
@@ -53,6 +53,8 @@ eureka:
     fetch-registry: true
     register-with-eureka: true
   instance:
+    metadata-map:
+      grpc.port: 9090
     hostname: localhost
     prefer-ip-address: true
     instance-id: ${spring.application.name}:${spring.application.instance_id:${random.value}}
