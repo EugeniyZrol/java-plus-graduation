@@ -14,10 +14,7 @@ import ru.practicum.ewm.stats.avro.UserActionAvro;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 
 @Slf4j
 @Component
@@ -53,11 +50,24 @@ public class AggregationStarter implements ApplicationRunner {
                 String actionType = message.getActionType().toString();
                 double weight = similarityCalculator.getActionWeight(actionType);
 
-                similarityCalculator.processAction(userId, eventId, weight);
+                List<EventSimilarityAvro> similarityMessages =
+                        similarityCalculator.processAction(userId, eventId, weight, message.getTimestamp());
+
+                for (EventSimilarityAvro similarityMessage : similarityMessages) {
+                    String key = similarityMessage.getEventA() + "_" + similarityMessage.getEventB();
+                    kafkaProducer.send(new ProducerRecord<>(
+                            kafkaProperties.getProducer().getTopic(),
+                            key,
+                            similarityMessage
+                    ));
+                    log.debug("Отправлено сходство: eventA={}, eventB={}, score={}",
+                            similarityMessage.getEventA(),
+                            similarityMessage.getEventB(),
+                            similarityMessage.getScore());
+                }
             });
 
             if (!records.isEmpty()) {
-                sendUpdatedSimilarities();
                 kafkaConsumer.commitSync();
                 log.debug("Зафиксированы offsets для {} сообщений", records.count());
             }

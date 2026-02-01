@@ -3,12 +3,11 @@ package ru.practicum.ewm.stats.aggregator;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
+import ru.practicum.ewm.stats.avro.EventSimilarityAvro;
 import ru.practicum.ewm.stats.dto.ActionWeights;
 
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
+import java.time.Instant;
+import java.util.*;
 
 @Component
 @Slf4j
@@ -25,7 +24,7 @@ public class SimilarityCalculator {
         return calculateCosineSimilarity(eventA, eventB);
     }
 
-    public void processAction(long userId, long eventId, double weight) {
+    public List<EventSimilarityAvro> processAction(long userId, long eventId, double weight, Instant timestamp) {
         log.info("Processing action: userId={}, eventId={}, weight={}", userId, eventId, weight);
 
         Map<Long, Double> eventUsers = userWeights.computeIfAbsent(eventId, k -> new HashMap<>());
@@ -33,35 +32,49 @@ public class SimilarityCalculator {
 
         if (currentWeight != null && currentWeight >= weight) {
             log.debug("Вес не увеличился: текущий={}, новый={}", currentWeight, weight);
-            return;
+            return Collections.emptyList();
         }
 
         double weightDiff = weight - (currentWeight != null ? currentWeight : 0.0);
         eventUsers.put(userId, weight);
 
         eventSums.put(eventId, eventSums.getOrDefault(eventId, 0.0) + weightDiff);
-        updatedEvents.add(eventId);
 
-        recalculateSimilarities(eventId, userId, weightDiff);
-    }
+        List<EventSimilarityAvro> messages = new ArrayList<>();
 
-    private void recalculateSimilarities(long updatedEventId, long userId, double weightDiff) {
-        for (Long otherEventId : userWeights.keySet()) {
-            if (otherEventId.equals(updatedEventId)) continue;
+        for (Map.Entry<Long, Map<Long, Double>> entry : userWeights.entrySet()) {
+            Long otherEventId = entry.getKey();
+            if (otherEventId.equals(eventId)) continue;
 
-            Map<Long, Double> otherEventUsers = userWeights.get(otherEventId);
-            Double otherWeight = otherEventUsers.get(userId);
+            Map<Long, Double> otherEventUsers = entry.getValue();
+            if (!otherEventUsers.containsKey(userId)) continue;
 
-            if (otherWeight != null) {
-                double oldWeightForEvent = userWeights.get(updatedEventId).get(userId) - weightDiff;
+            double otherWeight = otherEventUsers.get(userId);
+            double oldWeightForEvent = userWeights.get(eventId).get(userId) - weightDiff;
 
-                double oldMin = Math.min(oldWeightForEvent, otherWeight);
-                double newMin = Math.min(userWeights.get(updatedEventId).get(userId), otherWeight);
+            double oldMin = Math.min(oldWeightForEvent, otherWeight);
+            double newMin = Math.min(userWeights.get(eventId).get(userId), otherWeight);
 
-                putMinSum(updatedEventId, otherEventId,
-                        getMinSum(updatedEventId, otherEventId) - oldMin + newMin);
+            putMinSum(eventId, otherEventId,
+                    getMinSum(eventId, otherEventId) - oldMin + newMin);
+
+            double similarity = calculateCosineSimilarity(eventId, otherEventId);
+
+            if (similarity > 0.01) {
+                long first = Math.min(eventId, otherEventId);
+                long second = Math.max(eventId, otherEventId);
+
+                EventSimilarityAvro message = EventSimilarityAvro.newBuilder()
+                        .setEventA(first)
+                        .setEventB(second)
+                        .setScore(similarity)
+                        .setTimestamp(timestamp)
+                        .build();
+                messages.add(message);
             }
         }
+
+        return messages;
     }
 
     public void clearUpdatedEvents() {
