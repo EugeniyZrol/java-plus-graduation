@@ -44,12 +44,18 @@ public class SimilarityCalculator {
             Map<Long, Double> otherEventUsers = userWeights.get(otherEventId);
             double sMinDiff = 0.0;
 
-            for (Long uid : eventUsers.keySet()) {
-                if (otherEventUsers.containsKey(uid)) {
-                    double currentMin = Math.min(eventUsers.get(uid), otherEventUsers.get(uid));
+            Set<Long> allUsers = new HashSet<>(eventUsers.keySet());
+            allUsers.addAll(otherEventUsers.keySet());
+
+            for (Long uid : allUsers) {
+                Double weightA = eventUsers.get(uid);
+                Double weightB = otherEventUsers.get(uid);
+
+                if (weightA != null && weightB != null) {
+                    double currentMin = Math.min(weightA, weightB);
 
                     if (uid.equals(userId)) {
-                        double oldMin = Math.min(oldWeight != null ? oldWeight : 0.0, otherEventUsers.get(uid));
+                        double oldMin = Math.min(oldWeight != null ? oldWeight : 0.0, weightB);
                         sMinDiff += currentMin - oldMin;
                     }
                 }
@@ -60,7 +66,7 @@ public class SimilarityCalculator {
                 putMinSum(eventId, otherEventId, oldSmin + sMinDiff);
 
                 double similarity = calculateCosineSimilarity(eventId, otherEventId);
-                if (similarity > 0.00) {
+                if (similarity > 0.0) {
                     long first = Math.min(eventId, otherEventId);
                     long second = Math.max(eventId, otherEventId);
 
