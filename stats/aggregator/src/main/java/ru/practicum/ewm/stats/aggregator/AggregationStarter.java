@@ -36,6 +36,7 @@ public class AggregationStarter implements ApplicationRunner {
     @PreDestroy
     public void shutdown() {
         running = false;
+        kafkaConsumer.wakeup();
     }
 
     private void startKafkaConsumer() {

@@ -79,47 +79,6 @@ public class SimilarityCalculator {
                 }
             }
         }
-
-        if (oldWeight == null) {
-            for (Long otherEventId : userWeights.keySet()) {
-                if (otherEventId.equals(eventId)) continue;
-
-                Map<Long, Double> otherEventUsers = userWeights.get(otherEventId);
-
-                if (otherEventUsers.containsKey(userId)) {
-                    double otherWeight = otherEventUsers.get(userId);
-                    double minWeight = Math.min(weight, otherWeight);
-                    double currentSmin = getMinSum(eventId, otherEventId);
-                    double newSmin = currentSmin + minWeight;
-                    putMinSum(eventId, otherEventId, newSmin);
-
-                    double similarity = calculateCosineSimilarity(eventId, otherEventId);
-                    similarity = Math.round(similarity * 100.0) / 100.0;
-
-                    if (similarity > 0.0) {
-                        long first = Math.min(eventId, otherEventId);
-                        long second = Math.max(eventId, otherEventId);
-
-                        EventSimilarityAvro message = EventSimilarityAvro.newBuilder()
-                                .setEventA(first)
-                                .setEventB(second)
-                                .setScore(similarity)
-                                .setTimestamp(timestamp)
-                                .build();
-
-                        boolean alreadyExists = messages.stream()
-                                .anyMatch(m -> m.getEventA() == first && m.getEventB() == second);
-
-                        if (!alreadyExists) {
-                            messages.add(message);
-                            log.debug("Добавлено новое сходство: eventA={}, eventB={}, score={}",
-                                    first, second, similarity);
-                        }
-                    }
-                }
-            }
-        }
-
         return messages;
     }
 
