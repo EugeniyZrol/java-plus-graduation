@@ -21,67 +21,63 @@ public class SimilarityCalculator {
     public List<EventSimilarityAvro> processAction(long userId, long eventId, double weight, Instant timestamp) {
         log.info("Processing action: userId={}, eventId={}, weight={}", userId, eventId, weight);
 
-        if (!userWeights.containsKey(eventId)) {
-            return handleNewEvent(userId, eventId, weight, timestamp);
-        }
-
-        Map<Long, Double> eventUsers = userWeights.get(eventId);
+        // 1. Получаем или создаём мапу пользователей для события
+        Map<Long, Double> eventUsers = userWeights.computeIfAbsent(eventId, k -> new HashMap<>());
         Double oldWeight = eventUsers.get(userId);
 
+        // 2. Проверяем нужно ли обновление
         if (oldWeight != null && oldWeight >= weight) {
             log.debug("Вес не увеличился: текущий={}, новый={}", oldWeight, weight);
             return Collections.emptyList();
         }
 
+        // 3. Обновляем вес пользователя
         double weightDiff = weight - (oldWeight != null ? oldWeight : 0.0);
         eventUsers.put(userId, weight);
+
+        // 4. Обновляем сумму весов события
         eventSums.put(eventId, eventSums.getOrDefault(eventId, 0.0) + weightDiff);
 
         List<EventSimilarityAvro> messages = new ArrayList<>();
 
+        // 5. Для каждого другого события
         for (Long otherEventId : userWeights.keySet()) {
             if (otherEventId.equals(eventId)) continue;
 
             Map<Long, Double> otherEventUsers = userWeights.get(otherEventId);
-            double sMinDiff = 0.0;
 
-            Set<Long> allUsers = new HashSet<>(eventUsers.keySet());
-            allUsers.addAll(otherEventUsers.keySet());
+            // 6. Если пользователь взаимодействовал с обоими событиями
+            if (otherEventUsers.containsKey(userId)) {
+                double otherWeight = otherEventUsers.get(userId);
 
-            for (Long uid : allUsers) {
-                Double weightA = eventUsers.get(uid);
-                Double weightB = otherEventUsers.get(uid);
+                // 7. Считаем изменение sMin только для этого пользователя
+                double oldMin = Math.min(oldWeight != null ? oldWeight : 0.0, otherWeight);
+                double newMin = Math.min(weight, otherWeight);
+                double sMinDiff = newMin - oldMin;
 
-                if (weightA != null && weightB != null) {
-                    double currentMin = Math.min(weightA, weightB);
+                if (sMinDiff != 0.0) {
+                    double oldSmin = getMinSum(eventId, otherEventId);
+                    double newSmin = oldSmin + sMinDiff;
+                    putMinSum(eventId, otherEventId, newSmin);
 
-                    if (uid.equals(userId)) {
-                        double oldMin = Math.min(oldWeight != null ? oldWeight : 0.0, weightB);
-                        sMinDiff += currentMin - oldMin;
+                    // 8. Считаем сходство
+                    double similarity = calculateCosineSimilarity(eventId, otherEventId);
+
+                    if (similarity > 0.0) {
+                        long first = Math.min(eventId, otherEventId);
+                        long second = Math.max(eventId, otherEventId);
+
+                        EventSimilarityAvro message = EventSimilarityAvro.newBuilder()
+                                .setEventA(first)
+                                .setEventB(second)
+                                .setScore(similarity)
+                                .setTimestamp(timestamp)
+                                .build();
+                        messages.add(message);
+
+                        log.info("Сходство: {}<->{} = {} (oldMin={}, newMin={}, sMinDiff={})",
+                                first, second, similarity, oldMin, newMin, sMinDiff);
                     }
-                }
-            }
-
-            if (sMinDiff != 0.0) {
-                double oldSmin = getMinSum(eventId, otherEventId);
-                putMinSum(eventId, otherEventId, oldSmin + sMinDiff);
-
-                double similarity = calculateCosineSimilarity(eventId, otherEventId);
-
-                if (similarity > 0.0) {
-                    long first = Math.min(eventId, otherEventId);
-                    long second = Math.max(eventId, otherEventId);
-
-                    EventSimilarityAvro message = EventSimilarityAvro.newBuilder()
-                            .setEventA(first)
-                            .setEventB(second)
-                            .setScore(similarity)
-                            .setTimestamp(timestamp)
-                            .build();
-                    messages.add(message);
-
-                    log.debug("Рассчитано сходство: eventA={}, eventB={}, score={}",
-                            first, second, similarity);
                 }
             }
         }
