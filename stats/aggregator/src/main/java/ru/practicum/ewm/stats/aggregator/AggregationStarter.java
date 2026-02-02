@@ -1,5 +1,6 @@
 package ru.practicum.ewm.stats.aggregator;
 
+import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
@@ -25,49 +26,68 @@ public class AggregationStarter implements ApplicationRunner {
     private final SimilarityCalculator similarityCalculator;
     private final AggregatorKafkaProperties kafkaProperties;
 
+    private volatile boolean running = true;
+
     @Override
     public void run(ApplicationArguments args) throws Exception {
         new Thread(this::startKafkaConsumer, "kafka-aggregator-thread").start();
+    }
+
+    @PreDestroy
+    public void shutdown() {
+        running = false;
     }
 
     private void startKafkaConsumer() {
         kafkaConsumer.subscribe(Collections.singletonList(kafkaProperties.getConsumer().getTopic()));
         log.info("Подписан на топик: {}", kafkaProperties.getConsumer().getTopic());
 
-        while (true) {
-            ConsumerRecords<String, UserActionAvro> records = kafkaConsumer.poll(
-                    Duration.ofMillis(kafkaProperties.getConsumer().getPollTimeout().toMillis())
-            );
+        try {
+            while (running) {
+                ConsumerRecords<String, UserActionAvro> records = kafkaConsumer.poll(
+                        Duration.ofMillis(kafkaProperties.getConsumer().getPollTimeout().toMillis())
+                );
 
-            records.forEach(record -> {
-                UserActionAvro message = record.value();
-                log.info("Получено сообщение: userId={}, eventId={}, action={}",
-                        message.getUserId(), message.getEventId(), message.getActionType());
+                records.forEach(record -> {
+                    UserActionAvro message = record.value();
+                    log.info("Получено сообщение: userId={}, eventId={}, action={}",
+                            message.getUserId(), message.getEventId(), message.getActionType());
 
-                long userId = message.getUserId();
-                long eventId = message.getEventId();
-                String actionType = message.getActionType().toString();
-                double weight = similarityCalculator.getActionWeight(actionType);
+                    long userId = message.getUserId();
+                    long eventId = message.getEventId();
+                    String actionType = message.getActionType().toString();
+                    double weight = similarityCalculator.getActionWeight(actionType);
 
-                similarityCalculator.processAction(userId, eventId, weight, message.getTimestamp())
-                        .forEach(similarityMessage -> {
-                            String key = similarityMessage.getEventA() + "_" + similarityMessage.getEventB();
-                            kafkaProducer.send(new ProducerRecord<>(
-                                    kafkaProperties.getProducer().getTopic(),
-                                    key,
-                                    similarityMessage
-                            ));
-                            log.debug("Отправлено сходство: eventA={}, eventB={}, score={}",
-                                    similarityMessage.getEventA(),
-                                    similarityMessage.getEventB(),
-                                    similarityMessage.getScore());
-                        });
-            });
+                    similarityCalculator.processAction(userId, eventId, weight, message.getTimestamp())
+                            .forEach(similarityMessage -> {
+                                String key = similarityMessage.getEventA() + "_" + similarityMessage.getEventB();
+                                kafkaProducer.send(new ProducerRecord<>(
+                                        kafkaProperties.getProducer().getTopic(),
+                                        key,
+                                        similarityMessage
+                                ), (metadata, exception) -> {
+                                    if (exception != null) {
+                                        log.error("Ошибка отправки сообщения в Kafka: {}", exception.getMessage());
+                                    } else {
+                                        log.debug("Отправлено сходство: eventA={}, eventB={}, score={}",
+                                                similarityMessage.getEventA(),
+                                                similarityMessage.getEventB(),
+                                                similarityMessage.getScore());
+                                    }
+                                });
+                            });
+                });
 
-            if (!records.isEmpty()) {
-                kafkaConsumer.commitSync();
-                log.debug("Зафиксированы offsets для {} сообщений", records.count());
+                if (!records.isEmpty()) {
+                    kafkaConsumer.commitSync();
+                    log.debug("Зафиксированы offsets для {} сообщений", records.count());
+                }
             }
+        } catch (Exception e) {
+            log.error("Ошибка в потребителе Kafka", e);
+        } finally {
+            kafkaConsumer.close();
+            log.info("Потребитель Kafka остановлен");
         }
     }
 }

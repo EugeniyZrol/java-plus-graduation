@@ -21,46 +21,61 @@ public class SimilarityCalculator {
     public List<EventSimilarityAvro> processAction(long userId, long eventId, double weight, Instant timestamp) {
         log.info("Processing action: userId={}, eventId={}, weight={}", userId, eventId, weight);
 
-        // 1. Получаем или создаём мапу пользователей для события
+        // 1. Проверяем, существует ли уже взаимодействие пользователя с событием
         Map<Long, Double> eventUsers = userWeights.computeIfAbsent(eventId, k -> new HashMap<>());
         Double oldWeight = eventUsers.get(userId);
 
-        // 2. Проверяем нужно ли обновление
+        // 2. Согласно ТЗ: "когда один пользователь совершает несколько действий с одним и тем же мероприятием,
+        // учитывается только действие с максимальным весом"
         if (oldWeight != null && oldWeight >= weight) {
             log.debug("Вес не увеличился: текущий={}, новый={}", oldWeight, weight);
-            return Collections.emptyList();
+            return Collections.emptyList(); // Вес не увеличился - не нужно пересчитывать
         }
-
-        // 3. Обновляем вес пользователя
-        double weightDiff = weight - (oldWeight != null ? oldWeight : 0.0);
-        eventUsers.put(userId, weight);
-
-        // 4. Обновляем сумму весов события
-        eventSums.put(eventId, eventSums.getOrDefault(eventId, 0.0) + weightDiff);
 
         List<EventSimilarityAvro> messages = new ArrayList<>();
 
-        // 5. Для каждого другого события
+        // 3. Обновляем вес пользователя для этого события
+        double weightDiff;
+        if (oldWeight == null) {
+            // Первое взаимодействие пользователя с этим событием
+            weightDiff = weight;
+            eventUsers.put(userId, weight);
+
+            // Обновляем сумму весов события
+            eventSums.put(eventId, eventSums.getOrDefault(eventId, 0.0) + weight);
+
+            // 4. Обрабатываем как новое событие для этого пользователя
+            return handleNewEvent(userId, eventId, weight, timestamp);
+        } else {
+            // Увеличиваем вес пользователя
+            weightDiff = weight - oldWeight;
+            eventUsers.put(userId, weight);
+
+            // Обновляем сумму весов события
+            eventSums.put(eventId, eventSums.getOrDefault(eventId, 0.0) + weightDiff);
+        }
+
+        // 5. Для каждого другого события, с которым взаимодействовал этот пользователь
         for (Long otherEventId : userWeights.keySet()) {
             if (otherEventId.equals(eventId)) continue;
 
             Map<Long, Double> otherEventUsers = userWeights.get(otherEventId);
 
-            // 6. Если пользователь взаимодействовал с обоими событиями
+            // Если пользователь взаимодействовал с обоими событиями
             if (otherEventUsers.containsKey(userId)) {
                 double otherWeight = otherEventUsers.get(userId);
 
-                // 7. Считаем изменение sMin только для этого пользователя
-                double oldMin = Math.min(oldWeight != null ? oldWeight : 0.0, otherWeight);
+                // 6. Обновляем сумму минимальных весов для этой пары событий
+                double oldMin = Math.min(oldWeight, otherWeight);
                 double newMin = Math.min(weight, otherWeight);
                 double sMinDiff = newMin - oldMin;
 
-                if (sMinDiff != 0.0) {
-                    double oldSmin = getMinSum(eventId, otherEventId);
-                    double newSmin = oldSmin + sMinDiff;
+                if (Math.abs(sMinDiff) > 0.000001) { // Учитываем погрешность double
+                    double currentSmin = getMinSum(eventId, otherEventId);
+                    double newSmin = currentSmin + sMinDiff;
                     putMinSum(eventId, otherEventId, newSmin);
 
-                    // 8. Считаем сходство
+                    // 7. Пересчитываем сходство
                     double similarity = calculateCosineSimilarity(eventId, otherEventId);
 
                     if (similarity > 0.0) {
@@ -75,8 +90,8 @@ public class SimilarityCalculator {
                                 .build();
                         messages.add(message);
 
-                        log.info("Сходство: {}<->{} = {} (oldMin={}, newMin={}, sMinDiff={})",
-                                first, second, similarity, oldMin, newMin, sMinDiff);
+                        log.info("Обновлено сходство: {}<->{} = {} (oldWeight={}, newWeight={}, otherWeight={})",
+                                first, second, similarity, oldWeight, weight, otherWeight);
                     }
                 }
             }
@@ -86,16 +101,12 @@ public class SimilarityCalculator {
     }
 
     private List<EventSimilarityAvro> handleNewEvent(long userId, long eventId, double weight, Instant timestamp) {
-        log.info("Первое взаимодействие с мероприятием: eventId={}, userId={}, weight={}",
-                eventId, userId, weight);
-
-        Map<Long, Double> eventUsers = new HashMap<>();
-        eventUsers.put(userId, weight);
-        userWeights.put(eventId, eventUsers);
-        eventSums.put(eventId, weight);
+        log.info("Первое взаимодействие пользователя {} с мероприятием {}: weight={}",
+                userId, eventId, weight);
 
         List<EventSimilarityAvro> messages = new ArrayList<>();
 
+        // Для каждого другого события, с которым взаимодействовал этот пользователь
         for (Long otherEventId : userWeights.keySet()) {
             if (otherEventId.equals(eventId)) continue;
 
@@ -103,9 +114,14 @@ public class SimilarityCalculator {
 
             if (otherEventUsers.containsKey(userId)) {
                 double otherWeight = otherEventUsers.get(userId);
-                double sMin = Math.min(weight, otherWeight);
 
-                putMinSum(eventId, otherEventId, sMin);
+                // Добавляем минимальный вес для этой пары
+                double minWeight = Math.min(weight, otherWeight);
+                double currentSmin = getMinSum(eventId, otherEventId);
+                double newSmin = currentSmin + minWeight;
+                putMinSum(eventId, otherEventId, newSmin);
+
+                // Пересчитываем сходство
                 double similarity = calculateCosineSimilarity(eventId, otherEventId);
 
                 if (similarity > 0.0) {
@@ -134,7 +150,7 @@ public class SimilarityCalculator {
         double sA = eventSums.getOrDefault(eventA, 0.0);
         double sB = eventSums.getOrDefault(eventB, 0.0);
 
-        if (sA == 0.0 || sB == 0.0) {
+        if (sA == 0.0 || sB == 0.0 || sMin == 0.0) {
             return 0.0;
         }
 
@@ -162,9 +178,9 @@ public class SimilarityCalculator {
     public double getActionWeight(String actionType) {
         String normalizedType = actionType.replace("ACTION_", "");
         return switch (normalizedType) {
-            case "VIEW" -> ActionWeights.VIEW;      // 0.4
-            case "REGISTER" -> ActionWeights.REGISTER; // 0.8
-            case "LIKE" -> ActionWeights.LIKE;      // 1.2
+            case "VIEW" -> ActionWeights.VIEW;
+            case "REGISTER" -> ActionWeights.REGISTER;
+            case "LIKE" -> ActionWeights.LIKE;
             default -> 0.0;
         };
     }
