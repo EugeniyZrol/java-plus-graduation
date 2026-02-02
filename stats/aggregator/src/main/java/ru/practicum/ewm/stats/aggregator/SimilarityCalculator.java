@@ -31,14 +31,12 @@ public class SimilarityCalculator {
 
         List<EventSimilarityAvro> messages = new ArrayList<>();
 
-        double weightDiff;
         if (oldWeight == null) {
             eventUsers.put(userId, weight);
             eventSums.put(eventId, eventSums.getOrDefault(eventId, 0.0) + weight);
         } else {
-            weightDiff = weight - oldWeight;
+            eventSums.put(eventId, eventSums.get(eventId) - oldWeight + weight);
             eventUsers.put(userId, weight);
-            eventSums.put(eventId, eventSums.getOrDefault(eventId, 0.0) + weightDiff);
         }
 
         for (Long otherEventId : userWeights.keySet()) {
