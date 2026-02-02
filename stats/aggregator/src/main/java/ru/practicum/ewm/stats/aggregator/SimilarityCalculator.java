@@ -26,7 +26,7 @@ public class SimilarityCalculator {
 
         if (oldWeight != null && oldWeight >= weight) {
             log.debug("Вес не увеличился: текущий={}, новый={}", oldWeight, weight);
-            return Collections.emptyList(); // Вес не увеличился - не нужно пересчитывать
+            return Collections.emptyList();
         }
 
         List<EventSimilarityAvro> messages = new ArrayList<>();
@@ -50,30 +50,27 @@ public class SimilarityCalculator {
                 double newMin = Math.min(weight, otherWeight);
                 double sMinDiff = newMin - oldMin;
 
-                if (Math.abs(sMinDiff) > 0.000001) {
-                    double currentSmin = getMinSum(eventId, otherEventId);
-                    double newSmin = currentSmin + sMinDiff;
-                    putMinSum(eventId, otherEventId, newSmin);
+                double currentSmin = getMinSum(eventId, otherEventId);
+                double newSmin = currentSmin + sMinDiff;
+                putMinSum(eventId, otherEventId, newSmin);
 
-                    double similarity = calculateCosineSimilarity(eventId, otherEventId);
+                double similarity = calculateCosineSimilarity(eventId, otherEventId);
+                similarity = Math.round(similarity * 100.0) / 100.0;
 
-                    similarity = Math.round(similarity * 100.0) / 100.0;
+                if (similarity > 0.0) {
+                    long first = Math.min(eventId, otherEventId);
+                    long second = Math.max(eventId, otherEventId);
 
-                    if (similarity > 0.0) {
-                        long first = Math.min(eventId, otherEventId);
-                        long second = Math.max(eventId, otherEventId);
+                    EventSimilarityAvro message = EventSimilarityAvro.newBuilder()
+                            .setEventA(first)
+                            .setEventB(second)
+                            .setScore(similarity)
+                            .setTimestamp(timestamp)
+                            .build();
+                    messages.add(message);
 
-                        EventSimilarityAvro message = EventSimilarityAvro.newBuilder()
-                                .setEventA(first)
-                                .setEventB(second)
-                                .setScore(similarity)
-                                .setTimestamp(timestamp)
-                                .build();
-                        messages.add(message);
-
-                        log.info("Обновлено сходство: {}<->{} = {} (oldWeight={}, weight={}, otherWeight={})",
-                                first, second, similarity, oldWeight, weight, otherWeight);
-                    }
+                    log.info("Обновлено сходство: {}<->{} = {} (oldWeight={}, weight={}, otherWeight={})",
+                            first, second, similarity, oldWeight, weight, otherWeight);
                 }
             }
         }
