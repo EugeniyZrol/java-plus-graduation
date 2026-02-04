@@ -20,17 +20,15 @@ import java.util.Collections;
 @Component
 @RequiredArgsConstructor
 public class AggregationStarter implements ApplicationRunner {
-
     private final KafkaConsumer<String, UserActionAvro> kafkaConsumer;
     private final KafkaProducer<String, EventSimilarityAvro> kafkaProducer;
     private final SimilarityCalculator similarityCalculator;
     private final AggregatorKafkaProperties kafkaProperties;
-
     private volatile boolean running = true;
 
     @Override
-    public void run(ApplicationArguments args) throws Exception {
-        new Thread(this::startKafkaConsumer, "kafka-aggregator-thread").start();
+    public void run(ApplicationArguments args) {
+        new Thread(this::startConsuming, "kafka-aggregator-thread").start();
     }
 
     @PostConstruct
@@ -38,20 +36,13 @@ public class AggregationStarter implements ApplicationRunner {
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             running = false;
             kafkaConsumer.wakeup();
-            try {
-                Thread.sleep(1000);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
             log.info("Shutdown hook triggered");
         }));
     }
 
-    private void startKafkaConsumer() {
-        kafkaConsumer.subscribe(Collections.singletonList(
-                kafkaProperties.getTopics().getUserActions()
-        ));
-        log.info("Подписан на топик: {}", kafkaProperties.getTopics().getUserActions());
+    private void startConsuming() {
+        kafkaConsumer.subscribe(Collections.singletonList(kafkaProperties.getConsumer().getTopic()));
+        log.info("Subscribed to topic: {}", kafkaProperties.getConsumer().getTopic());
 
         try {
             while (running) {
@@ -61,7 +52,7 @@ public class AggregationStarter implements ApplicationRunner {
 
                 records.forEach(record -> {
                     UserActionAvro message = record.value();
-                    log.info("Получено сообщение: userId={}, eventId={}, action={}",
+                    log.debug("Получено сообщение: userId={}, eventId={}, action={}",
                             message.getUserId(), message.getEventId(), message.getActionType());
 
                     long userId = message.getUserId();
@@ -73,14 +64,14 @@ public class AggregationStarter implements ApplicationRunner {
                             .forEach(similarityMessage -> {
                                 String key = similarityMessage.getEventA() + "_" + similarityMessage.getEventB();
                                 kafkaProducer.send(new ProducerRecord<>(
-                                        kafkaProperties.getTopics().getEventsSimilarity(),
+                                        kafkaProperties.getProducer().getTopic(),
                                         key,
                                         similarityMessage
                                 ), (metadata, exception) -> {
                                     if (exception != null) {
-                                        log.error("Ошибка отправки сообщения в Kafka: {}", exception.getMessage());
+                                        log.error("Ошибка отправки: {}", exception.getMessage(), exception);
                                     } else {
-                                        log.debug("Отправлено сходство: eventA={}, eventB={}, score={}",
+                                        log.trace("Отправлено сходство: eventA={}, eventB={}, score={}",
                                                 similarityMessage.getEventA(),
                                                 similarityMessage.getEventB(),
                                                 similarityMessage.getScore());
@@ -91,7 +82,7 @@ public class AggregationStarter implements ApplicationRunner {
 
                 if (!records.isEmpty()) {
                     kafkaConsumer.commitSync();
-                    log.debug("Зафиксированы offsets для {} сообщений", records.count());
+                    log.debug("Committed offsets for {} messages", records.count());
                 }
             }
         } catch (Exception e) {

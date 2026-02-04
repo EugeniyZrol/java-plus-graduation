@@ -5,30 +5,26 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 
 import java.time.Duration;
-import java.util.Map;
 
 @Configuration
 @ConfigurationProperties("aggregator.kafka")
 @Data
 public class AggregatorKafkaProperties {
-    private ProducerConfig producer;
-    private ConsumerConfig consumer;
-    private Topics topics;
-
-    @Data
-    public static class Topics {
-        private String userActions;
-        private String eventsSimilarity;
-    }
+    private ProducerConfig producer = new ProducerConfig();
+    private ConsumerConfig consumer = new ConsumerConfig();
 
     @Data
     public static class ProducerConfig {
-        private Map<String, Object> properties;
+        private String topic = "stats.events-similarity.v1";
+        private String compressionType = "snappy";
+        private int retries = 3;
     }
 
     @Data
     public static class ConsumerConfig {
+        private String topic = "stats.user-actions.v1";
         private Duration pollTimeout = Duration.ofMillis(100);
-        private Map<String, Object> properties;
+        private String groupId = "aggregator-group";
+        private int concurrency = 3;
     }
 }
