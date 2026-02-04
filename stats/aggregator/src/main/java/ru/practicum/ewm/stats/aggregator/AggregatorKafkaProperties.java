@@ -1,30 +1,53 @@
 package ru.practicum.ewm.stats.aggregator;
 
-import lombok.Data;
+import lombok.Getter;
+import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.context.annotation.Configuration;
+import org.springframework.stereotype.Component;
 
-import java.time.Duration;
+import java.util.HashMap;
+import java.util.Map;
 
-@Configuration
-@ConfigurationProperties("aggregator.kafka")
-@Data
+@Getter
+@Setter
+@Component
+@ConfigurationProperties(prefix = "aggregator.kafka")
 public class AggregatorKafkaProperties {
-    private ProducerConfig producer = new ProducerConfig();
-    private ConsumerConfig consumer = new ConsumerConfig();
 
-    @Data
-    public static class ProducerConfig {
-        private String topic = "stats.events-similarity.v1";
-        private String compressionType = "snappy";
-        private int retries = 3;
+    private ConsumerProperties consumer = new ConsumerProperties();
+    private ProducerProperties producer = new ProducerProperties();
+    private Map<String, String> topics = new HashMap<>();
+
+    @Getter
+    @Setter
+    public static class ConsumerProperties {
+        private String bootstrapServers;
+        private String keyDeserializer;
+        private String groupId;
+        private String autoOffsetReset;
+        private Boolean enableAutoCommit;
+        private Integer maxPollRecords;
+        private Integer pollTimeoutMs;
     }
 
-    @Data
-    public static class ConsumerConfig {
-        private String topic = "stats.user-actions.v1";
-        private Duration pollTimeout = Duration.ofMillis(100);
-        private String groupId = "aggregator-group";
-        private int concurrency = 3;
+    @Getter
+    @Setter
+    public static class ProducerProperties {
+        private String bootstrapServers;
+        private String keySerializer;
+        private String valueSerializer;
+        private String acks;
+        private Integer retries;
+        private String compressionType;
+        private Integer batchSize;
+        private Integer lingerMs;
+    }
+
+    public String getUserActionsTopic() {
+        return topics.get("user-actions");
+    }
+
+    public String getEventsSimilarityTopic() {
+        return topics.get("events-similarity");
     }
 }

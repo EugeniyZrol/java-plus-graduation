@@ -41,13 +41,16 @@ public class AggregationStarter implements ApplicationRunner {
     }
 
     private void startConsuming() {
-        kafkaConsumer.subscribe(Collections.singletonList(kafkaProperties.getConsumer().getTopic()));
-        log.info("Subscribed to topic: {}", kafkaProperties.getConsumer().getTopic());
+        String consumerTopic = kafkaProperties.getUserActionsTopic();
+        String producerTopic = kafkaProperties.getEventsSimilarityTopic();
+
+        kafkaConsumer.subscribe(Collections.singletonList(consumerTopic));
+        log.info("Subscribed to topic: {}", consumerTopic);
 
         try {
             while (running) {
                 ConsumerRecords<String, UserActionAvro> records = kafkaConsumer.poll(
-                        Duration.ofMillis(kafkaProperties.getConsumer().getPollTimeout().toMillis())
+                        Duration.ofMillis(kafkaProperties.getConsumer().getPollTimeoutMs())
                 );
 
                 records.forEach(record -> {
@@ -64,7 +67,7 @@ public class AggregationStarter implements ApplicationRunner {
                             .forEach(similarityMessage -> {
                                 String key = similarityMessage.getEventA() + "_" + similarityMessage.getEventB();
                                 kafkaProducer.send(new ProducerRecord<>(
-                                        kafkaProperties.getProducer().getTopic(),
+                                        producerTopic,
                                         key,
                                         similarityMessage
                                 ), (metadata, exception) -> {
