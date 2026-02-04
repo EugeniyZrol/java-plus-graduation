@@ -7,35 +7,33 @@ spring:
   cloud:
     config:
       enabled: false
-  kafka:
-    bootstrap-servers: localhost:9092
-    consumer:
-      group-id: aggregator-group
-      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      value-deserializer: ru.practicum.ewm.stats.kafka.AvroDeserializer
-      properties:
-        value.deserializer.target.type: ru.practicum.ewm.stats.avro.UserActionAvro
-      auto-offset-reset: earliest
-      enable-auto-commit: false
-      max-poll-records: 500
-    producer:
-      key-serializer: org.apache.kafka.common.serialization.StringSerializer
-      value-serializer: ru.practicum.ewm.stats.kafka.AvroSerializer
-      properties:
-        acks: all
-        retries: 3
-        batch.size: 16384
 
 aggregator:
   kafka:
-    producer:
-      topic: stats.events-similarity.v1
+    topics:
+      user-actions: stats.user-actions.v1
+      events-similarity: stats.events-similarity.v1
+    consumer:
+      poll-timeout: 100ms
       properties:
+        bootstrap.servers: localhost:9092
+        group.id: aggregator-group
+        key.deserializer: org.apache.kafka.common.serialization.StringDeserializer
+        value.deserializer: ru.practicum.ewm.stats.kafka.AvroDeserializer
+        value.deserializer.target.type: ru.practicum.ewm.stats.avro.UserActionAvro
+        auto.offset.reset: earliest
+        enable.auto.commit: false
+        max.poll.records: 500
+    producer:
+      properties:
+        bootstrap.servers: localhost:9092
+        key.serializer: org.apache.kafka.common.serialization.StringSerializer
+        value.serializer: ru.practicum.ewm.stats.kafka.AvroSerializer
+        acks: all
+        retries: 3
+        batch.size: 16384
         compression.type: snappy
         linger.ms: 10
-    consumer:
-      topic: stats.user-actions.v1
-      poll-timeout: 100ms
 
 eureka:
   client:

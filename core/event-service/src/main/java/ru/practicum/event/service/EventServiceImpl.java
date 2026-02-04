@@ -97,13 +97,10 @@ public class EventServiceImpl implements EventService {
         event.setState(EventState.PENDING);
 
         Event savedEvent = eventRepository.save(event);
-
-        CategoryDto category = categoryService.getCategoryById(savedEvent.getCategoryId());
-        UserShortDto initiator = userClient.getUserShortById(savedEvent.getInitiatorId());
-        EventFullDto eventDto = eventMapper.toFullDto(savedEvent, category, initiator);
-        eventDto.setConfirmedRequests(0L);
-        eventDto.setRating(0.0);
-        return eventDto;
+        EventFullDto dto = eventStatsService.enrichEventFullDto(savedEvent);
+        dto.setConfirmedRequests(0L);
+        dto.setRating(0.0);
+        return dto;
     }
 
     @Override
@@ -146,15 +143,11 @@ public class EventServiceImpl implements EventService {
         }
 
         Event updatedEvent = eventRepository.save(event);
-
-        CategoryDto category = categoryService.getCategoryById(updatedEvent.getCategoryId());
-        UserShortDto initiator = userClient.getUserShortById(updatedEvent.getInitiatorId());
-
-        return eventStatsService.enrichEventFullDto(updatedEvent, category, initiator);
+        return eventStatsService.enrichEventFullDto(updatedEvent);
     }
 
     @Override
-    public List<EventShortDto> getPublicEvents(PublicEventSearchRequest requestParams, Pageable pageable, String ip) {
+    public List<EventShortDto> getPublicEvents(PublicEventSearchRequest requestParams, Pageable pageable) {
         EventValidationUtils.validateDateRange(requestParams.getRangeStart(), requestParams.getRangeEnd());
 
         Specification<Event> spec = buildPublicEventsSpecification(requestParams);
@@ -171,7 +164,7 @@ public class EventServiceImpl implements EventService {
     }
 
     @Override
-    public EventFullDto getPublicEventById(Long eventId, Long userId, String ip) {
+    public EventFullDto getPublicEventById(Long eventId, Long userId) {
         Event event = eventRepository.findById(eventId)
                 .filter(e -> EventState.PUBLISHED.equals(e.getState()))
                 .orElseThrow(() -> new NotFoundException("Event not found"));
@@ -286,37 +279,20 @@ public class EventServiceImpl implements EventService {
                 .map(RecommendedEvent::getEventId)
                 .collect(Collectors.toSet());
 
-        Set<Event> events = getEventsByIds(eventIds);
+        List<Event> events = eventRepository.findAllById(eventIds).stream()
+                .filter(event -> EventState.PUBLISHED.equals(event.getState()))
+                .collect(Collectors.toList());
 
         Map<Long, Double> scoreMap = recommendedEvents.stream()
                 .collect(Collectors.toMap(RecommendedEvent::getEventId, RecommendedEvent::getScore));
 
-        Map<Long, CategoryDto> categories = categoryService.getCategoriesByIds(
-                events.stream().map(Event::getCategoryId).collect(Collectors.toSet())
-        );
-        Map<Long, UserShortDto> users = userClient.getUsersShortByIds(
-                events.stream().map(Event::getInitiatorId).collect(Collectors.toSet())
-        );
+        List<EventShortDto> result = eventStatsService.enrichEventsShortDtoBatch(events);
 
-        Map<Long, Long> confirmedRequestsMap = eventStatsService.getConfirmedRequestsBatch(
-                new ArrayList<>(eventIds)
-        );
+        result.forEach(dto -> dto.setRating(scoreMap.getOrDefault(dto.getId(), 0.0)));
 
-        return events.stream()
-                .filter(event -> EventState.PUBLISHED.equals(event.getState()))
-                .sorted(Comparator.comparingDouble(event ->
-                        -scoreMap.getOrDefault(event.getId(), 0.0)))
+        return result.stream()
+                .sorted(Comparator.comparingDouble(EventShortDto::getRating).reversed())
                 .limit(size)
-                .map(event -> {
-                    EventShortDto dto = eventMapper.toShortDto(
-                            event,
-                            categories.get(event.getCategoryId()),
-                            users.get(event.getInitiatorId())
-                    );
-                    dto.setRating(scoreMap.getOrDefault(event.getId(), 0.0));
-                    dto.setConfirmedRequests(confirmedRequestsMap.getOrDefault(event.getId(), 0L));
-                    return dto;
-                })
                 .collect(Collectors.toList());
     }
 

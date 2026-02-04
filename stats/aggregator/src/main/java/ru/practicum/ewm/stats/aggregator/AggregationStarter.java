@@ -1,6 +1,6 @@
 package ru.practicum.ewm.stats.aggregator;
 
-import jakarta.annotation.PreDestroy;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
@@ -33,15 +33,25 @@ public class AggregationStarter implements ApplicationRunner {
         new Thread(this::startKafkaConsumer, "kafka-aggregator-thread").start();
     }
 
-    @PreDestroy
-    public void shutdown() {
-        running = false;
-        kafkaConsumer.wakeup();
+    @PostConstruct
+    public void init() {
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            running = false;
+            kafkaConsumer.wakeup();
+            try {
+                Thread.sleep(1000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            log.info("Shutdown hook triggered");
+        }));
     }
 
     private void startKafkaConsumer() {
-        kafkaConsumer.subscribe(Collections.singletonList(kafkaProperties.getConsumer().getTopic()));
-        log.info("Подписан на топик: {}", kafkaProperties.getConsumer().getTopic());
+        kafkaConsumer.subscribe(Collections.singletonList(
+                kafkaProperties.getTopics().getUserActions()
+        ));
+        log.info("Подписан на топик: {}", kafkaProperties.getTopics().getUserActions());
 
         try {
             while (running) {
@@ -63,7 +73,7 @@ public class AggregationStarter implements ApplicationRunner {
                             .forEach(similarityMessage -> {
                                 String key = similarityMessage.getEventA() + "_" + similarityMessage.getEventB();
                                 kafkaProducer.send(new ProducerRecord<>(
-                                        kafkaProperties.getProducer().getTopic(),
+                                        kafkaProperties.getTopics().getEventsSimilarity(),
                                         key,
                                         similarityMessage
                                 ), (metadata, exception) -> {

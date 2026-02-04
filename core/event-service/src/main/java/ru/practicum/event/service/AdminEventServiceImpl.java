@@ -72,9 +72,7 @@ public class AdminEventServiceImpl implements AdminEventService {
         Event updatedEvent = eventRepository.save(event);
         log.info("Событие обновлено администратором: ID={}, новое состояние={}", eventId, updatedEvent.getState());
 
-        CategoryDto category = categoryService.getCategoryById(updatedEvent.getCategoryId());
-        UserShortDto initiator = userClient.getUserShortById(updatedEvent.getInitiatorId());
-        return eventStatsService.enrichEventFullDto(updatedEvent, category, initiator);
+        return eventStatsService.enrichEventFullDto(updatedEvent);
     }
 
     private Specification<Event> buildAdminEventsSpecification(AdminEventSearchRequest params) {

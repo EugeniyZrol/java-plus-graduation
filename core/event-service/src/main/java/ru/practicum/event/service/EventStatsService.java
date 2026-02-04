@@ -1,6 +1,8 @@
 package ru.practicum.event.service;
 
+import ru.practicum.categories.service.CategoryService;
 import ru.practicum.interaction.client.feign.RequestClient;
+import ru.practicum.interaction.client.feign.UserClient;
 import ru.practicum.interaction.dto.categories.CategoryDto;
 import ru.practicum.interaction.dto.event.EventFullDto;
 import ru.practicum.interaction.dto.event.EventShortDto;
@@ -22,10 +24,26 @@ public class EventStatsService {
     private final RequestClient requestClient;
     private final EventMapper eventMapper;
     private final AnalyzerGrpcClient analyzerGrpcClient;
+    private final CategoryService categoryService;
+    private final UserClient userClient;
 
     public EventFullDto enrichEventFullDto(Event event, CategoryDto category, UserShortDto initiator) {
         EventFullDto dto = eventMapper.toFullDto(event, category, initiator);
 
+        Long confirmedRequests = getConfirmedRequests(event.getId());
+        dto.setConfirmedRequests(confirmedRequests);
+
+        Double rating = analyzerGrpcClient.getEventRating(event.getId());
+        dto.setRating(rating != null ? rating : 0.0);
+
+        return dto;
+    }
+
+    public EventFullDto enrichEventFullDto(Event event) {
+        CategoryDto category = categoryService.getCategoryById(event.getCategoryId());
+        UserShortDto initiator = userClient.getUserShortById(event.getInitiatorId());
+
+        EventFullDto dto = eventMapper.toFullDto(event, category, initiator);
         Long confirmedRequests = getConfirmedRequests(event.getId());
         dto.setConfirmedRequests(confirmedRequests);
 
@@ -41,6 +59,39 @@ public class EventStatsService {
         if (events.isEmpty()) {
             return Collections.emptyList();
         }
+
+        List<Long> eventIds = events.stream()
+                .map(Event::getId)
+                .collect(Collectors.toList());
+
+        Map<Long, Double> ratingsMap = getRatingsForEventsBatch(eventIds);
+        Map<Long, Long> requestsMap = getConfirmedRequestsBatch(eventIds);
+
+        return events.stream()
+                .map(event -> {
+                    EventShortDto dto = eventMapper.toShortDto(
+                            event,
+                            categories.get(event.getCategoryId()),
+                            users.get(event.getInitiatorId())
+                    );
+                    dto.setRating(ratingsMap.getOrDefault(event.getId(), 0.0));
+                    dto.setConfirmedRequests(requestsMap.getOrDefault(event.getId(), 0L));
+                    return dto;
+                })
+                .collect(Collectors.toList());
+    }
+
+    public List<EventShortDto> enrichEventsShortDtoBatch(List<Event> events) {
+        if (events.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        Map<Long, CategoryDto> categories = categoryService.getCategoriesByIds(
+                events.stream().map(Event::getCategoryId).collect(Collectors.toSet())
+        );
+        Map<Long, UserShortDto> users = userClient.getUsersShortByIds(
+                events.stream().map(Event::getInitiatorId).collect(Collectors.toSet())
+        );
 
         List<Long> eventIds = events.stream()
                 .map(Event::getId)
@@ -95,14 +146,10 @@ public class EventStatsService {
         if (eventIds.isEmpty()) {
             return Collections.emptyMap();
         }
-
-        Map<Long, Double> ratings = new HashMap<>();
-        for (Long eventId : eventIds) {
-            Double rating = analyzerGrpcClient.getEventRating(eventId);
-            ratings.put(eventId, rating != null ? rating : 0.0);
-        }
-        return ratings;
+        return analyzerGrpcClient.getEventsRatingBatch(eventIds);
     }
+
+
 
     public Map<Long, Long> getConfirmedRequestsBatch(List<Long> eventIds) {
         if (eventIds.isEmpty()) {

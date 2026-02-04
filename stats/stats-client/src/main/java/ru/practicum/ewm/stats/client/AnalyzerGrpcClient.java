@@ -8,9 +8,7 @@ import org.springframework.stereotype.Component;
 import ru.practicum.ewm.stats.proto.*;
 import ru.practicum.ewm.stats.model.RecommendedEvent;
 
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
+import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.StreamSupport;
 
@@ -83,6 +81,29 @@ public class AnalyzerGrpcClient {
         } catch (StatusRuntimeException e) {
             log.error("Не удалось получить рейтинг события: {}", e.getMessage(), e);
             return 0.0;
+        }
+    }
+
+    public Map<Long, Double> getEventsRatingBatch(List<Long> eventIds) {
+        try {
+            InteractionsCountRequestProto request = InteractionsCountRequestProto.newBuilder()
+                    .addAllEventId(eventIds)
+                    .build();
+
+            Iterator<RecommendedEventProto> iterator = analyzerStub.getInteractionsCount(request);
+
+            Map<Long, Double> ratings = new HashMap<>();
+            while (iterator.hasNext()) {
+                RecommendedEventProto proto = iterator.next();
+                ratings.put(proto.getEventId(), proto.getScore());
+            }
+
+            eventIds.forEach(id -> ratings.putIfAbsent(id, 0.0));
+
+            return ratings;
+        } catch (StatusRuntimeException e) {
+            log.error("Не удалось получить рейтинги событий: {}", e.getMessage(), e);
+            return eventIds.stream().collect(Collectors.toMap(id -> id, id -> 0.0));
         }
     }
 }
