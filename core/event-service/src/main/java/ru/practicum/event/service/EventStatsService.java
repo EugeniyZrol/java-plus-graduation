@@ -1,20 +1,19 @@
 package ru.practicum.event.service;
 
-import client.StatsClient;
+import ru.practicum.categories.service.CategoryService;
 import ru.practicum.interaction.client.feign.RequestClient;
+import ru.practicum.interaction.client.feign.UserClient;
 import ru.practicum.interaction.dto.categories.CategoryDto;
 import ru.practicum.interaction.dto.event.EventFullDto;
 import ru.practicum.interaction.dto.event.EventShortDto;
 import ru.practicum.event.mapper.EventMapper;
 import ru.practicum.event.model.Event;
-import ru.practicum.event.repository.EventRepository;
-import model.ViewStatsDto;
+import ru.practicum.ewm.stats.client.AnalyzerGrpcClient;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import ru.practicum.interaction.dto.user.UserShortDto;
 
-import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -22,10 +21,11 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 @Slf4j
 public class EventStatsService {
-    private final StatsClient statsClient;
     private final RequestClient requestClient;
-    private final EventRepository eventRepository;
     private final EventMapper eventMapper;
+    private final AnalyzerGrpcClient analyzerGrpcClient;
+    private final CategoryService categoryService;
+    private final UserClient userClient;
 
     public EventFullDto enrichEventFullDto(Event event, CategoryDto category, UserShortDto initiator) {
         EventFullDto dto = eventMapper.toFullDto(event, category, initiator);
@@ -33,8 +33,22 @@ public class EventStatsService {
         Long confirmedRequests = getConfirmedRequests(event.getId());
         dto.setConfirmedRequests(confirmedRequests);
 
-        Long views = getViews(event.getId());
-        dto.setViews(views);
+        Double rating = analyzerGrpcClient.getEventRating(event.getId());
+        dto.setRating(rating != null ? rating : 0.0);
+
+        return dto;
+    }
+
+    public EventFullDto enrichEventFullDto(Event event) {
+        CategoryDto category = categoryService.getCategoryById(event.getCategoryId());
+        UserShortDto initiator = userClient.getUserShortById(event.getInitiatorId());
+
+        EventFullDto dto = eventMapper.toFullDto(event, category, initiator);
+        Long confirmedRequests = getConfirmedRequests(event.getId());
+        dto.setConfirmedRequests(confirmedRequests);
+
+        Double rating = analyzerGrpcClient.getEventRating(event.getId());
+        dto.setRating(rating != null ? rating : 0.0);
 
         return dto;
     }
@@ -50,7 +64,7 @@ public class EventStatsService {
                 .map(Event::getId)
                 .collect(Collectors.toList());
 
-        Map<Long, Long> viewsMap = getViewsForEventsBatch(eventIds);
+        Map<Long, Double> ratingsMap = getRatingsForEventsBatch(eventIds);
         Map<Long, Long> requestsMap = getConfirmedRequestsBatch(eventIds);
 
         return events.stream()
@@ -60,7 +74,40 @@ public class EventStatsService {
                             categories.get(event.getCategoryId()),
                             users.get(event.getInitiatorId())
                     );
-                    dto.setViews(viewsMap.getOrDefault(event.getId(), 0L));
+                    dto.setRating(ratingsMap.getOrDefault(event.getId(), 0.0));
+                    dto.setConfirmedRequests(requestsMap.getOrDefault(event.getId(), 0L));
+                    return dto;
+                })
+                .collect(Collectors.toList());
+    }
+
+    public List<EventShortDto> enrichEventsShortDtoBatch(List<Event> events) {
+        if (events.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        Map<Long, CategoryDto> categories = categoryService.getCategoriesByIds(
+                events.stream().map(Event::getCategoryId).collect(Collectors.toSet())
+        );
+        Map<Long, UserShortDto> users = userClient.getUsersShortByIds(
+                events.stream().map(Event::getInitiatorId).collect(Collectors.toSet())
+        );
+
+        List<Long> eventIds = events.stream()
+                .map(Event::getId)
+                .collect(Collectors.toList());
+
+        Map<Long, Double> ratingsMap = getRatingsForEventsBatch(eventIds);
+        Map<Long, Long> requestsMap = getConfirmedRequestsBatch(eventIds);
+
+        return events.stream()
+                .map(event -> {
+                    EventShortDto dto = eventMapper.toShortDto(
+                            event,
+                            categories.get(event.getCategoryId()),
+                            users.get(event.getInitiatorId())
+                    );
+                    dto.setRating(ratingsMap.getOrDefault(event.getId(), 0.0));
                     dto.setConfirmedRequests(requestsMap.getOrDefault(event.getId(), 0L));
                     return dto;
                 })
@@ -78,7 +125,7 @@ public class EventStatsService {
                 .map(Event::getId)
                 .collect(Collectors.toList());
 
-        Map<Long, Long> viewsMap = getViewsForEventsBatch(eventIds);
+        Map<Long, Double> ratingsMap = getRatingsForEventsBatch(eventIds);
         Map<Long, Long> requestsMap = getConfirmedRequestsBatch(eventIds);
 
         return events.stream()
@@ -88,41 +135,20 @@ public class EventStatsService {
                             categories.get(event.getCategoryId()),
                             users.get(event.getInitiatorId())
                     );
-                    dto.setViews(viewsMap.getOrDefault(event.getId(), 0L));
+                    dto.setRating(ratingsMap.getOrDefault(event.getId(), 0.0));
                     dto.setConfirmedRequests(requestsMap.getOrDefault(event.getId(), 0L));
                     return dto;
                 })
                 .collect(Collectors.toList());
     }
 
-    public Map<Long, Long> getViewsForEventsBatch(List<Long> eventIds) {
+    public Map<Long, Double> getRatingsForEventsBatch(List<Long> eventIds) {
         if (eventIds.isEmpty()) {
             return Collections.emptyMap();
         }
-
-        List<String> uris = eventIds.stream()
-                .map(id -> "/events/" + id)
-                .collect(Collectors.toList());
-
-        LocalDateTime start = getEarliestEventDate();
-        LocalDateTime end = LocalDateTime.now();
-
-        log.debug("Запрос статистики просмотров для {} событий с {} по {}",
-                eventIds.size(), start, end);
-
-        List<ViewStatsDto> stats = statsClient.getStats(start, end, uris, true);
-
-        return createViewsMap(eventIds, stats);
+        return analyzerGrpcClient.getEventsRatingBatch(eventIds);
     }
 
-    public void recordHit(String path, String ip) {
-        try {
-            log.debug("Запись hit для пути {} с IP: {}", path, ip);
-            statsClient.hit(path, ip);
-        } catch (Exception e) {
-            log.error("Ошибка при записи статистики для пути {}: {}", path, e.getMessage(), e);
-        }
-    }
 
 
     public Map<Long, Long> getConfirmedRequestsBatch(List<Long> eventIds) {
@@ -152,55 +178,8 @@ public class EventStatsService {
         }
     }
 
-
     public Long getConfirmedRequests(Long eventId) {
         Map<Long, Long> requestsMap = getConfirmedRequestsBatch(Collections.singletonList(eventId));
         return requestsMap.getOrDefault(eventId, 0L);
-    }
-
-
-    public Long getViews(Long eventId) {
-        Map<Long, Long> viewsMap = getViewsForEventsBatch(Collections.singletonList(eventId));
-        return viewsMap.getOrDefault(eventId, 0L);
-    }
-
-
-    private Map<Long, Long> createViewsMap(List<Long> eventIds, List<ViewStatsDto> stats) {
-        Map<Long, Long> viewsMap = eventIds.stream()
-                .collect(Collectors.toMap(id -> id, id -> 0L));
-
-        if (stats != null && !stats.isEmpty()) {
-            stats.forEach(stat -> {
-                Long eventId = extractEventIdFromUri(stat.getUri());
-                if (eventId != -1L) {
-                    viewsMap.put(eventId, stat.getHits());
-                }
-            });
-        }
-
-        return viewsMap;
-    }
-
-    private Long extractEventIdFromUri(String uri) {
-        try {
-            String[] parts = uri.split("/");
-            String lastPart = parts[parts.length - 1];
-            return Long.parseLong(lastPart);
-        } catch (Exception e) {
-            log.warn("Не удалось извлечь ID события из URI: {}", uri);
-            return -1L;
-        }
-    }
-
-    private LocalDateTime getEarliestEventDate() {
-        try {
-            Event earliestEvent = eventRepository.findFirstByOrderByCreatedAtAsc();
-            return (earliestEvent != null)
-                    ? earliestEvent.getCreatedAt()
-                    : LocalDateTime.now().minusYears(1);
-        } catch (Exception e) {
-            log.warn("Не удалось получить дату самого раннего события: {}", e.getMessage());
-            return LocalDateTime.now().minusYears(1);
-        }
     }
 }

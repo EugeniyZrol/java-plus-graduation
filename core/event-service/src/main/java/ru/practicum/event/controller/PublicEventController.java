@@ -1,11 +1,11 @@
 package ru.practicum.event.controller;
 
-import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.http.HttpStatus;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import ru.practicum.interaction.dto.event.EventFullDto;
@@ -32,8 +32,7 @@ public class PublicEventController {
                                          @RequestParam(defaultValue = "false") Boolean onlyAvailable,
                                          @RequestParam(required = false) String sort,
                                          @RequestParam(defaultValue = "0") @Min(0) int from,
-                                         @RequestParam(defaultValue = "10") @Min(1) int size,
-                                         HttpServletRequest request) {
+                                         @RequestParam(defaultValue = "10") @Min(1) int size) {
         PublicEventSearchRequest params = PublicEventSearchRequest.builder()
                 .text(text)
                 .categories(categories)
@@ -44,11 +43,27 @@ public class PublicEventController {
                 .sort(sort)
                 .build();
         Pageable pageable = PageRequest.of(from / size, size);
-        return eventService.getPublicEvents(params, pageable, request.getRemoteAddr());
+        return eventService.getPublicEvents(params, pageable);
     }
 
     @GetMapping("/{id}")
-    public EventFullDto getEvent(@PathVariable Long id, HttpServletRequest request) {
-        return eventService.getPublicEventById(id, request.getRemoteAddr());
+    public EventFullDto getEvent(@PathVariable Long id,
+                                 @RequestHeader("X-EWM-USER-ID") Long userId) {
+        return eventService.getPublicEventById(id, userId);
+    }
+
+    @GetMapping("/recommendations")
+    public List<EventShortDto> getRecommendations(
+            @RequestHeader("X-EWM-USER-ID") Long userId,
+            @RequestParam(defaultValue = "10") @Min(1) int size) {
+        return eventService.getRecommendations(userId, size);
+    }
+
+    @PutMapping("/{eventId}/like")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void likeEvent(
+            @RequestHeader("X-EWM-USER-ID") Long userId,
+            @PathVariable Long eventId) {
+        eventService.likeEvent(userId, eventId);
     }
 }

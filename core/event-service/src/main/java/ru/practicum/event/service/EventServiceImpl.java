@@ -2,6 +2,9 @@ package ru.practicum.event.service;
 
 import ru.practicum.categories.service.CategoryService;
 import ru.practicum.event.repository.specification.EventSpecifications;
+import ru.practicum.ewm.stats.client.AnalyzerGrpcClient;
+import ru.practicum.ewm.stats.client.CollectorGrpcClient;
+import ru.practicum.ewm.stats.model.RecommendedEvent;
 import ru.practicum.interaction.client.feign.UserClient;
 import ru.practicum.interaction.dto.categories.CategoryDto;
 import ru.practicum.interaction.dto.event.*;
@@ -11,6 +14,7 @@ import ru.practicum.event.model.Event;
 import ru.practicum.interaction.enums.event.EventState;
 import ru.practicum.interaction.enums.event.StateAction;
 import ru.practicum.event.repository.EventRepository;
+import ru.practicum.interaction.exception.ConflictException;
 import ru.practicum.interaction.validation.EventValidationUtils;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -35,6 +39,8 @@ public class EventServiceImpl implements EventService {
     private final EventStatsService eventStatsService;
     private final UserClient userClient;
     private final CategoryService categoryService;
+    private final CollectorGrpcClient collectorGrpcClient;
+    private final AnalyzerGrpcClient analyzerGrpcClient;
 
     @Override
     public List<EventShortDto> getEvents(Long userId, Pageable pageable) {
@@ -64,7 +70,7 @@ public class EventServiceImpl implements EventService {
         Event event = eventRepository.findByIdAndInitiatorId(eventId, userId)
                 .orElseThrow(() -> new NotFoundException("Event not found"));
 
-        eventStatsService.recordHit("/events/" + eventId, ip);
+        collectorGrpcClient.sendView(userId, eventId);
 
         CategoryDto category = categoryService.getCategoryById(event.getCategoryId());
         UserShortDto initiator = userClient.getUserShortById(event.getInitiatorId());
@@ -91,13 +97,10 @@ public class EventServiceImpl implements EventService {
         event.setState(EventState.PENDING);
 
         Event savedEvent = eventRepository.save(event);
-
-        CategoryDto category = categoryService.getCategoryById(savedEvent.getCategoryId());
-        UserShortDto initiator = userClient.getUserShortById(savedEvent.getInitiatorId());
-        EventFullDto eventDto = eventMapper.toFullDto(savedEvent, category, initiator);
-        eventDto.setConfirmedRequests(0L);
-        eventDto.setViews(0L);
-        return eventDto;
+        EventFullDto dto = eventStatsService.enrichEventFullDto(savedEvent);
+        dto.setConfirmedRequests(0L);
+        dto.setRating(0.0);
+        return dto;
     }
 
     @Override
@@ -140,15 +143,11 @@ public class EventServiceImpl implements EventService {
         }
 
         Event updatedEvent = eventRepository.save(event);
-
-        CategoryDto category = categoryService.getCategoryById(updatedEvent.getCategoryId());
-        UserShortDto initiator = userClient.getUserShortById(updatedEvent.getInitiatorId());
-
-        return eventStatsService.enrichEventFullDto(updatedEvent, category, initiator);
+        return eventStatsService.enrichEventFullDto(updatedEvent);
     }
 
     @Override
-    public List<EventShortDto> getPublicEvents(PublicEventSearchRequest requestParams, Pageable pageable, String ip) {
+    public List<EventShortDto> getPublicEvents(PublicEventSearchRequest requestParams, Pageable pageable) {
         EventValidationUtils.validateDateRange(requestParams.getRangeStart(), requestParams.getRangeEnd());
 
         Specification<Event> spec = buildPublicEventsSpecification(requestParams);
@@ -161,17 +160,16 @@ public class EventServiceImpl implements EventService {
                 events.stream().map(Event::getInitiatorId).collect(Collectors.toSet())
         );
 
-        eventStatsService.recordHit("/events", ip);
         return eventStatsService.enrichEventsShortDtoBatch(events, categories, users);
     }
 
     @Override
-    public EventFullDto getPublicEventById(Long eventId, String ip) {
+    public EventFullDto getPublicEventById(Long eventId, Long userId) {
         Event event = eventRepository.findById(eventId)
                 .filter(e -> EventState.PUBLISHED.equals(e.getState()))
                 .orElseThrow(() -> new NotFoundException("Event not found"));
 
-        eventStatsService.recordHit("/events/" + eventId, ip);
+        collectorGrpcClient.sendView(userId, eventId);
 
         CategoryDto category = categoryService.getCategoryById(event.getCategoryId());
         UserShortDto initiator = userClient.getUserShortById(event.getInitiatorId());
@@ -262,5 +260,48 @@ public class EventServiceImpl implements EventService {
     public Event getEventByIdForFeign(Long eventId) {
         return eventRepository.findById(eventId)
                 .orElseThrow(() -> new NotFoundException("Event not found with id: " + eventId));
+    }
+
+    @Override
+    public List<EventShortDto> getRecommendations(Long userId, int size) {
+        if (Boolean.FALSE.equals(userClient.existsUserById(userId))) {
+            throw new NotFoundException("User not found with id: " + userId);
+        }
+
+        List<RecommendedEvent> recommendedEvents =
+                analyzerGrpcClient.getRecommendationsForUser(userId, size);
+
+        if (recommendedEvents.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        Set<Long> eventIds = recommendedEvents.stream()
+                .map(RecommendedEvent::getEventId)
+                .collect(Collectors.toSet());
+
+        List<Event> events = eventRepository.findAllById(eventIds).stream()
+                .filter(event -> EventState.PUBLISHED.equals(event.getState()))
+                .collect(Collectors.toList());
+
+        Map<Long, Double> scoreMap = recommendedEvents.stream()
+                .collect(Collectors.toMap(RecommendedEvent::getEventId, RecommendedEvent::getScore));
+
+        List<EventShortDto> result = eventStatsService.enrichEventsShortDtoBatch(events);
+
+        result.forEach(dto -> dto.setRating(scoreMap.getOrDefault(dto.getId(), 0.0)));
+
+        return result.stream()
+                .sorted(Comparator.comparingDouble(EventShortDto::getRating).reversed())
+                .limit(size)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public void likeEvent(Long userId, Long eventId) {
+        Double rating = analyzerGrpcClient.getEventRating(eventId);
+        if (rating == null || rating <= 0.0) {
+            throw new ConflictException("Пользователь не посещал это мероприятие");
+        }
+        collectorGrpcClient.sendLike(userId, eventId);
     }
 }

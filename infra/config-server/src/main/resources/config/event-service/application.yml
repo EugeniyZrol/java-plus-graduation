@@ -1,5 +1,5 @@
 server:
-  port: 8082
+  port: 0
 
 spring:
   application:
@@ -24,6 +24,15 @@ spring:
 
   jackson:
     time-zone: UTC
+
+grpc:
+  client:
+    analyzer:
+      address: 'discovery:///analyzer'
+      negotiationType: plaintext
+    collector:
+      address: 'discovery:///collector'
+      negotiationType: plaintext
 
 resilience4j:
   circuitbreaker:

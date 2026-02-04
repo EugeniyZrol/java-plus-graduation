@@ -1,0 +1,33 @@
+server:
+  port: 0
+
+spring:
+  application:
+    name: collector
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: ru.practicum.ewm.stats.kafka.AvroSerializer
+      properties:
+        acks: all
+        retries: 3
+        max.block.ms: 5000
+        batch.size: 16384
+        linger.ms: 1
+        buffer.memory: 33554432
+
+grpc:
+  server:
+    port: 0
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+    fetch-registry: true
+    register-with-eureka: true
+  instance:
+    hostname: localhost
+    prefer-ip-address: true
+    instance-id: ${spring.application.name}:${spring.application.instance_id:${random.value}}

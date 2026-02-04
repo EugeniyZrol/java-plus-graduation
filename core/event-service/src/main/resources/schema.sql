@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS events (
     request_moderation BOOLEAN DEFAULT TRUE,
     state VARCHAR(20) NOT NULL,
     title VARCHAR(120) NOT NULL,
-    views BIGINT DEFAULT 0,
+    rating DOUBLE PRECISION DEFAULT 0.0,
     latitude FLOAT NOT NULL,
     longitude FLOAT NOT NULL
 );
